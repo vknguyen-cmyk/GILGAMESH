@@ -21,7 +21,7 @@ export type ViewKind = "top" | "side";
 
 export type MaterialFilter = "all" | "organic" | "metal";
 
-export type Phase = "entering" | "scanning" | "ready";
+export type Phase = "entering" | "scanning" | "ready" | "failed";
 
 /**
  * Item placement is in bag space, 0–1.
@@ -56,8 +56,12 @@ export interface Detection {
   label: string;
   confidence: number;
   threat: boolean;
-  material: Material;
-  shape: ItemShape;
+  /** Real scans estimate this from pixel color; grayscale scans report "unknown". */
+  material: Material | "unknown";
+  /** Scripted bags only. */
+  shape?: ItemShape;
+  /** Real scans only: the model's box, normalized to the image (0–1). */
+  box?: Rect;
 }
 
 export interface Analysis {
@@ -70,10 +74,8 @@ export interface Analysis {
 
 export interface Decision {
   bagId: string;
-  type: BagType;
-  tag: string;
   action: "cleared" | "held";
-  verdict: "clear" | "threat";
+  verdict: "clear" | "threat" | "unscreened";
   at: number;
 }
 

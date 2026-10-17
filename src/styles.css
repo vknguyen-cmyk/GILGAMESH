@@ -551,3 +551,87 @@ button:focus-visible, input:focus-visible {
   .plate.posed, .scanline, .rollers, .live i, .stamp { animation: none; transition: none; }
   .plate.entering { transform: none; }
 }
+
+/* Real X-ray lane */
+.lane-modes {
+  display: flex;
+  margin: 0 12px 10px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+.lane-modes button {
+  flex: 1;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lane-modes button.on { background: var(--text); color: #14181d; }
+.bag-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bag-hint {
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.rail-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.ghost.upload { width: 100%; padding: 9px 12px; border-radius: 10px; font-weight: 650; }
+.rail-foot .note { margin: 0; color: var(--amber); font-size: 12px; line-height: 1.4; }
+
+.views.single { grid-template-rows: minmax(0, 1fr); }
+.verdict-bar.failed { background: #2b2116; color: var(--amber); }
+.views.failed .plate { box-shadow: inset 0 0 0 2px var(--amber), 0 10px 30px rgba(0, 0, 0, 0.18); }
+.hitbox.chip-in .chip { transform: none; top: 0; left: 0; }
+
+.empty-actions { display: flex; gap: 8px; justify-content: center; }
+.dropzone {
+  max-width: 420px;
+  padding: 28px 24px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+}
+.dropzone p { line-height: 1.5; }
+.model-status { margin: 14px 0 0; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.model-status.ok { color: var(--safe); }
+.model-status.missing {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(230, 162, 60, 0.4);
+  background: var(--amber-dim);
+  text-align: left;
+}
+.model-status.missing p { margin: 0 0 6px; color: var(--text); font-family: var(--sans); font-size: 13px; line-height: 1.45; }
+
+.threshold { padding: 2px 16px 12px; }
+.threshold label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.threshold label b { font-family: var(--mono); font-size: 13px; color: var(--amber); }
+.threshold input { width: 100%; margin: 8px 0 4px; accent-color: var(--amber); }
+.threshold p { margin: 0; color: var(--muted); font-size: 12px; }
+
+.fail { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.fail p { margin: 0; font-size: 13px; line-height: 1.45; }
+.fail p:first-child { color: var(--amber); }
+.fail .ghost { padding: 8px 12px; border-radius: 10px; font-weight: 600; }
+
+.drop-overlay {
+  position: absolute;
+  inset: 10px;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--amber);
+  border-radius: 16px;
+  background: rgba(12, 17, 22, 0.82);
+  pointer-events: none;
+}
+.drop-overlay div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.drop-overlay strong { font-size: 20px; }
+.drop-overlay span { color: var(--muted); font-size: 13px; }
