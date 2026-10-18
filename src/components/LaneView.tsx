@@ -340,10 +340,6 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
           })}
           {snapshot.log.length === 0 && <li className="empty">{status}</li>}
         </ul>
-        <p className="lane-note">
-          The 3D bags are animation. Each scan is a real X-ray image screened by the models on this laptop. Bags the
-          models flag are pushed to bag search; an officer makes the final call.
-        </p>
       </aside>
     </div>
   );

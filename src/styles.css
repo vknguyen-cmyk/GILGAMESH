@@ -55,7 +55,7 @@ input[type="range"] { accent-color: var(--blue); }
 .app {
   height: 100%;
   display: grid;
-  grid-template-rows: 60px minmax(0, 1fr) 38px;
+  grid-template-rows: 60px minmax(0, 1fr);
   background: var(--bg);
 }
 
@@ -1225,6 +1225,6 @@ input[type="range"] { accent-color: var(--blue); }
   border-radius: 12px;
 }
 .passenger-photo, .history-rows img { background: var(--fill); }
-/* History opens over either screen, between the top bar and the footer */
+/* History opens over either screen, below the top bar */
 .app { position: relative; }
-.app > .history-sheet { inset: 60px 0 38px; }
+.app > .history-sheet { inset: 60px 0 0; }

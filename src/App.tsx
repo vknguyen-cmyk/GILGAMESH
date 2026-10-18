@@ -450,17 +450,6 @@ export function App() {
   }
   const stateClass = ready ? analysis.verdict : phase;
 
-  let modelLine = "Simulation lane · scores are scripted for the booth";
-  if (mode === "real") {
-    if (modelState.status === "ready") {
-      modelLine = `Real images · ${modelState.model.config.name} · prototype, an officer makes the final call`;
-    } else if (modelState.status === "missing") {
-      modelLine = "Real images · no X-ray model loaded";
-    } else {
-      modelLine = "Real images · loading model";
-    }
-  }
-
   const scanLines = isReal ? REAL_SCAN_LINES : SCAN_LINES;
 
   return (
@@ -481,7 +470,6 @@ export function App() {
           </span>
           <div>
             <strong>GILGAMESH</strong>
-            <span>Terminal 3 · Lane 04 · Carry-on</span>
           </div>
         </div>
         <div className="view-switch" role="group" aria-label="Screen">
@@ -1019,18 +1007,6 @@ export function App() {
 
       <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
 
-      <footer className="bottombar">
-        <span>{modelLine}</span>
-        <span className="keys">
-          {screen === "lane"
-            ? "Drag to orbit · click a held bag's blue node for its 3D view · drop images to add them to the belt"
-            : show3d
-            ? "Esc back to 2D · drag to orbit"
-            : mode === "real"
-              ? "Drop images to add · click a box to select · H hold · C clear · 3 density view"
-              : "Click a box or the bag for 3D · H hold · C clear · 3 open 3D"}
-        </span>
-      </footer>
     </div>
   );
 }
