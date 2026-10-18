@@ -398,7 +398,8 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
     scene.add(g);
     return {
       serial,
-      label: `B-${labelBase + serial}`,
+      // The bag carries its scan's ID, so the lane, console and history all name it the same.
+      label: scan.id,
       spec,
       scan,
       group: g,
@@ -562,8 +563,6 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
   const parked: Bag[] = [];
   const log: Bag[] = [];
   let serial = 1;
-  // Bag numbers start somewhere random each session so they stay unique in the history server.
-  const labelBase = 1000 + Math.floor(Math.random() * 8000);
   let paused = false;
   let speed = reducedMotion ? 0.6 : 1;
   let follow = false;

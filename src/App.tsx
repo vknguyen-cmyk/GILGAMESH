@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { BAGS, TYPE_LABEL } from "./data/bags";
 import { analyzeBag } from "./lib/analyze";
 import { detect, loadModel, type LoadedModel } from "./lib/detector";
-import { buildRealAnalysis, loadScan } from "./lib/realScan";
+import { buildRealAnalysis, loadScan, type RealScan } from "./lib/realScan";
 import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
 import { DensityView } from "./components/DensityView";
 import { LaneView } from "./components/LaneView";
+import { toLaneScan, type LaneItem } from "./lib/laneScans";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 import { HistorySheet } from "./components/HistorySheet";
 import { PassengerCard } from "./components/PassengerCard";
@@ -97,6 +98,38 @@ export function App() {
   const dragDepth = useRef(0);
   const realResultsRef = useRef(realResults);
   realResultsRef.current = realResults;
+  const pendingResults = useRef(new Map<string, Promise<RealResult>>());
+
+  /**
+   * Run the models on one uploaded scan, once. The console and the lane both read this
+   * result, so a scan gets the same detections on either screen.
+   */
+  function resultFor(scan: RealScan): Promise<RealResult> {
+    const cached = realResultsRef.current[scan.id];
+    if (cached) return Promise.resolve(cached);
+    let job = pendingResults.current.get(scan.id);
+    if (!job) {
+      job = detect(scan.bitmap).then(
+        (result) => {
+          setModelState({ status: "ready", model: result.model });
+          const value: RealResult = { raw: result.detections, elapsedMs: result.elapsedMs };
+          setRealResults((current) => ({ ...current, [scan.id]: value }));
+          return value;
+        },
+        (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (error instanceof Error && error.name === "ModelMissingError") {
+            setModelState({ status: "missing", error: message });
+          }
+          const value: RealResult = { error: message };
+          setRealResults((current) => ({ ...current, [scan.id]: value }));
+          return value;
+        },
+      );
+      pendingResults.current.set(scan.id, job);
+    }
+    return job;
+  }
 
   const entries = mode === "demo" ? SIM_ENTRIES : realEntries;
   const index = indexes[mode];
@@ -115,6 +148,26 @@ export function App() {
     if (!realResult || !("raw" in realResult) || !model) return null;
     return buildRealAnalysis(entry.scan, realResult.raw, model, effectiveThreshold, realResult.elapsedMs);
   }, [entry, realResult, model, effectiveThreshold]);
+
+  // Analyze every upload as soon as it arrives, so the lane can carry it without waiting for the console.
+  useEffect(() => {
+    for (const item of realEntries) if (item.kind === "real") void resultFor(item.scan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realEntries]);
+
+  /** Uploads as bags: same analysis and same alarm threshold as the console. */
+  const laneItems: LaneItem[] = useMemo(
+    () =>
+      realEntries.flatMap((item): LaneItem[] => {
+        if (item.kind !== "real") return [];
+        const result = realResults[item.scan.id];
+        if (!result || !model) return [{ id: item.scan.id, state: "analyzing" }];
+        if ("error" in result) return [{ id: item.scan.id, state: "failed" }];
+        const laneAnalysis = buildRealAnalysis(item.scan, result.raw, model, effectiveThreshold, result.elapsedMs);
+        return [{ id: item.scan.id, state: "ready", scan: toLaneScan(item.scan, laneAnalysis) }];
+      }),
+    [realEntries, realResults, model, effectiveThreshold],
+  );
 
   function setIndex(update: (value: number) => number) {
     setIndexes((current) => ({ ...current, [mode]: update(current[mode]) }));
@@ -209,30 +262,10 @@ export function App() {
           }, wait),
         );
       };
-      const cached = realResultsRef.current[scan.id];
-      const job =
-        cached && "raw" in cached
-          ? Promise.resolve(cached)
-          : detect(scan.bitmap).then((result) => {
-              setModelState({ status: "ready", model: result.model });
-              return { raw: result.detections, elapsedMs: result.elapsedMs };
-            });
-      job.then(
-        (result) => {
-          if (cancelled) return;
-          setRealResults((current) => ({ ...current, [scan.id]: result }));
-          finish("ready");
-        },
-        (error: unknown) => {
-          if (cancelled) return;
-          const message = error instanceof Error ? error.message : String(error);
-          setRealResults((current) => ({ ...current, [scan.id]: { error: message } }));
-          if (error instanceof Error && error.name === "ModelMissingError") {
-            setModelState({ status: "missing", error: message });
-          }
-          finish("failed");
-        },
-      );
+      resultFor(scan).then((result) => {
+        if (cancelled) return;
+        finish("error" in result ? "failed" : "ready");
+      });
     }
 
     return () => {
@@ -509,7 +542,13 @@ export function App() {
       </header>
 
       {screen === "lane" ? (
-        <LaneView onRecord={() => setHistoryTick((value) => value + 1)} />
+        <LaneView
+          items={laneItems}
+          onAddFiles={(files) => void addFiles(files)}
+          sampleCount={samples.length}
+          onUseSamples={() => void loadSamples()}
+          onRecord={() => setHistoryTick((value) => value + 1)}
+        />
       ) : (
       <div className="workspace">
         <aside className="rail queue">

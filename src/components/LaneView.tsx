@@ -1,93 +1,57 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { detect, loadModel, type LoadedModel } from "../lib/detector";
-import { buildRealAnalysis, loadScan } from "../lib/realScan";
-import { mountLane, type LaneApi, type LaneDetection, type LaneLogEntry, type LaneScan, type LaneSnapshot } from "../lib/laneScene";
+import { mountLane, type LaneApi, type LaneLogEntry, type LaneSnapshot } from "../lib/laneScene";
+import type { LaneItem } from "../lib/laneScans";
 import { mountInspect } from "../lib/inspectScene";
 import { HistoryOfflineError, fetchRecordByBag, photoSrc, saveBag, scanToJpeg } from "../lib/historyApi";
 import type { PassengerRecord } from "../types/history";
 
 /**
- * The screening lane: a 3D belt and X-ray tunnel where every bag carries a real scan,
- * screened by the same models and thresholds as the console. Flagged bags are pushed to
- * bag search; clicking one opens its 3D density view.
+ * The screening lane: every X-ray you upload rides the belt as one bag, in upload order.
+ * Each bag carries its scan's console analysis (same models, same alarm threshold), so the
+ * lane holds a bag exactly when the console flags its scan. Flagged bags are pushed to
+ * bag search; clicking one opens its 3D density view and owner.
  */
-
-interface SampleScan {
-  file: string;
-  name?: string;
-}
 
 const REDUCED_MOTION =
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-async function analyze(file: File, model: LoadedModel): Promise<LaneScan> {
-  const scan = await loadScan(file);
-  const result = await detect(scan.bitmap);
-  const analysis = buildRealAnalysis(scan, result.detections, model, model.config.defaultThreshold ?? 0.35, result.elapsedMs);
-  const detections: LaneDetection[] = analysis.detections
-    .filter((d) => d.box)
-    .map((d) => ({
-      label: d.label,
-      score: d.confidence,
-      x: d.box!.x,
-      y: d.box!.y,
-      w: d.box!.w,
-      h: d.box!.h,
-      kind: d.uncertain ? "review" : d.threat ? "threat" : "benign",
-    }));
-  return {
-    id: scan.id,
-    file: scan.fileName,
-    image: scan.bitmap,
-    width: scan.width,
-    height: scan.height,
-    verdict: analysis.verdict,
-    detections,
-    top: detections.find((d) => d.kind !== "benign") ?? detections[0] ?? null,
-  };
+interface LaneViewProps {
+  /** Uploaded scans in upload order, shared with the console. */
+  items: LaneItem[];
+  onAddFiles: (files: File[]) => void;
+  sampleCount: number;
+  onUseSamples: () => void;
+  onRecord?: () => void;
 }
 
-export function LaneView({ onRecord }: { onRecord?: () => void }) {
+export function LaneView({ items, onAddFiles, sampleCount, onUseSamples, onRecord }: LaneViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const monitorRef = useRef<HTMLCanvasElement>(null);
   const apiRef = useRef<LaneApi | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const scansRef = useRef<LaneScan[]>([]);
-  const pendingRef = useRef<LaneScan[]>([]);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  /** Index of the next upload to put on the belt. */
   const cursorRef = useRef(0);
-  const modelRef = useRef<Promise<LoadedModel> | null>(null);
+  const [sent, setSent] = useState(0);
   const historyOffline = useRef(false);
   const onRecordRef = useRef(onRecord);
   onRecordRef.current = onRecord;
 
   const [snapshot, setSnapshot] = useState<LaneSnapshot>({ focus: null, log: [], cleared: 0, held: 0 });
-  const [status, setStatus] = useState("Loading the X-ray models…");
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(REDUCED_MOTION ? 0.6 : 1);
   const [follow, setFollow] = useState(false);
   const [inspect, setInspect] = useState<LaneLogEntry | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  const getModel = () => (modelRef.current ??= loadModel());
-
-  async function addFiles(files: File[]) {
-    const images = files.filter((f) => f.type.startsWith("image/"));
-    if (!images.length) {
-      setStatus("Drop image files: PNG, JPG, WebP, or BMP.");
-      return;
-    }
-    try {
-      const model = await getModel();
-      for (const [i, file] of images.entries()) {
-        setStatus(`Screening ${file.name} (${i + 1} of ${images.length})…`);
-        const scan = await analyze(file, model);
-        scansRef.current.push(scan);
-        pendingRef.current.push(scan);
-      }
-      setStatus(`${images.length} new scan${images.length === 1 ? "" : "s"} on the belt next`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
+  const analyzing = items.filter((i) => i.state === "analyzing").length;
+  const waiting = items.length - sent;
+  let status = "Add X-ray images. Each one rides the belt as a bag.";
+  if (items.length) {
+    if (analyzing) status = `Analyzing ${analyzing} scan${analyzing === 1 ? "" : "s"}…`;
+    else if (waiting > 0) status = `${waiting} bag${waiting === 1 ? "" : "s"} waiting for the belt`;
+    else status = `All ${items.length} uploaded scan${items.length === 1 ? " has" : "s have"} been through the lane`;
   }
 
   // Mount the 3D lane once.
@@ -98,15 +62,21 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
     const api = mountLane(host, {
       monitor,
       reducedMotion: REDUCED_MOTION,
+      // Uploads board in order; a scan still being analyzed holds the line until its result is in.
       nextScan: () => {
-        if (pendingRef.current.length) return pendingRef.current.shift()!;
-        const all = scansRef.current;
-        if (!all.length) return null;
-        return all[cursorRef.current++ % all.length];
+        const list = itemsRef.current;
+        while (cursorRef.current < list.length) {
+          const item = list[cursorRef.current];
+          if (item.state === "analyzing") return null;
+          cursorRef.current++;
+          setSent(cursorRef.current);
+          if (item.state === "ready") return item.scan;
+        }
+        return null;
       },
       onChange: setSnapshot,
       onInspect: setInspect,
-      // Each bag's result goes to the history server: its scan with boxes, verdict, and where it went.
+      // Each bag's result goes to the history server under its scan's ID: scan with boxes, verdict, where it went.
       onResult: (entry) => {
         if (historyOffline.current) return;
         const { scan } = entry;
@@ -114,7 +84,7 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
         void saveBag(entry.label, {
           scan: {
             dataUrl: scanToJpeg(scan.image, scan.width, scan.height, scan.detections),
-            caption: `${entry.type} · ${scan.file}`,
+            caption: scan.file,
           },
           screening: {
             verdict: scan.verdict,
@@ -140,36 +110,10 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
     };
   }, []);
 
-  // Screen the bundled sample scans so the lane runs before anyone uploads.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const model = await getModel();
-        const res = await fetch(`${import.meta.env.BASE_URL}samples/samples.json`);
-        const list: SampleScan[] = res.ok ? await res.json() : [];
-        if (!list.length) {
-          setStatus("Add X-ray images to start the belt");
-          return;
-        }
-        for (const [i, sample] of list.entries()) {
-          if (cancelled) return;
-          setStatus(`Screening sample scans (${i + 1} of ${list.length})…`);
-          const blob = await (await fetch(`${import.meta.env.BASE_URL}samples/${sample.file}`)).blob();
-          const scan = await analyze(new File([blob], sample.name ?? sample.file, { type: blob.type }), model);
-          if (cancelled) return;
-          scansRef.current.push(scan);
-        }
-        setStatus(`${list.length} sample scans on a loop · add your own anytime`);
-      } catch (error) {
-        if (!cancelled) setStatus(error instanceof Error ? error.message : String(error));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  function runAgain() {
+    cursorRef.current = 0;
+    setSent(0);
+  }
 
   useEffect(() => apiRef.current?.setPaused(paused), [paused]);
   useEffect(() => apiRef.current?.setSpeed(speed), [speed]);
@@ -187,7 +131,7 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
   const focus = snapshot.focus;
   const verdict = focus?.phase ?? "waiting";
   const top = focus?.scan.top;
-  let vTitle = "Belt starting";
+  let vTitle = items.length ? "Belt starting" : "No bags yet";
   let vSub = status;
   if (focus) {
     if (verdict === "scanning") {
@@ -207,7 +151,8 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
       vSub = "Officer confirms before clearing";
     }
   }
-  const vClass = verdict === "analyzing" || verdict === "waiting" ? "scanning" : verdict;
+  const vClass =
+    verdict === "waiting" ? (items.length ? "scanning" : "idle") : verdict === "analyzing" ? "scanning" : verdict;
 
   const stop = (e: DragEvent) => {
     e.preventDefault();
@@ -229,12 +174,12 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
       onDrop={(e) => {
         stop(e);
         setDragging(false);
-        void addFiles(Array.from(e.dataTransfer.files));
+        onAddFiles(Array.from(e.dataTransfer.files));
       }}
     >
       <section className="lane-stage" aria-label="3D view of the screening lane">
         <div ref={hostRef} className="lane-host" data-testid="lane-3d" />
-        <span className="lane-badge">Animated lane · real scans and real model results</span>
+        <span className="lane-badge">Each bag is one of your uploaded X-rays</span>
         <div className="lane-hud">
           <span className="hint">Drag to orbit · click the blue node on a held bag to see it in 3D</span>
           <button type="button" className="lane-btn" onClick={() => setPaused((p) => !p)}>
@@ -255,6 +200,11 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
           <button type="button" className="lane-btn" onClick={() => setFollow((f) => !f)}>
             {follow ? "Overview" : "Follow bag"}
           </button>
+          {items.length > 0 && waiting === 0 && analyzing === 0 && (
+            <button type="button" className="lane-btn" onClick={runAgain}>
+              Run again
+            </button>
+          )}
           <button type="button" className="lane-btn" onClick={() => fileInput.current?.click()}>
             Add X-ray images
           </button>
@@ -265,16 +215,32 @@ export function LaneView({ onRecord }: { onRecord?: () => void }) {
             multiple
             hidden
             onChange={(e) => {
-              if (e.target.files) void addFiles(Array.from(e.target.files));
+              if (e.target.files) onAddFiles(Array.from(e.target.files));
               e.target.value = "";
             }}
           />
         </div>
+        {items.length === 0 && (
+          <div className="lane-empty">
+            <strong>Put X-rays on the belt</strong>
+            <span>Each image you add rides through as one bag. Flagged bags are pushed to bag search.</span>
+            <div>
+              <button type="button" className="lane-btn primary-lane" onClick={() => fileInput.current?.click()}>
+                Add X-ray images
+              </button>
+              {sampleCount > 0 && (
+                <button type="button" className="lane-btn" onClick={onUseSamples}>
+                  Use {sampleCount} sample scans
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {inspect && <InspectPanel entry={inspect} onClose={() => setInspect(null)} />}
         {dragging && (
           <div className="lane-drop" aria-hidden="true">
             <strong>Drop X-rays to put them on the belt</strong>
-            <span>They are screened on this laptop, then ride through next</span>
+            <span>Each image becomes a bag on the belt, screened like in the Console</span>
           </div>
         )}
       </section>
