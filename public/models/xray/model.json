@@ -23,10 +23,17 @@
   ],
   "threats": [
     "Blade",
+    "Cans",
+    "Carton Drink",
     "Dagger",
+    "Glass Bottle",
     "Knife",
+    "Plastic Bottle",
     "Scissors",
-    "Swiss Army Knife"
+    "Spray Can",
+    "Swiss Army Knife",
+    "Tin",
+    "Vacuum Cup"
   ],
   "format": "yolov8",
   "resize": "stretch",
