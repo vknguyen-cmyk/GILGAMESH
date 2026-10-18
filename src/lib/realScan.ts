@@ -52,13 +52,13 @@ export async function loadScan(file: File): Promise<RealScan> {
   };
 }
 
-type Tone = Material | "background" | "gray";
+export type Tone = Material | "background" | "gray";
 
 /**
  * Classify one pixel by the pseudo-color a dual-energy scanner paints it.
  * Orange is organic, green is mixed, blue is metal. Near-white is empty belt.
  */
-function toneOf(r: number, g: number, b: number): Tone {
+export function toneOf(r: number, g: number, b: number): Tone {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   if (min > 232) return "background";

@@ -6,6 +6,7 @@ import { buildRealAnalysis, loadScan } from "./lib/realScan";
 import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
+import { DensityView } from "./components/DensityView";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 
 type Mode = "demo" | "real";
@@ -224,7 +225,7 @@ export function App() {
       }
       if (event.key === "3" || event.key === "Enter") {
         if (show3d && event.key === "Enter" && confirmClear) return;
-        if (!show3d && phase === "ready" && entry?.kind === "sim") {
+        if (!show3d && phase === "ready" && entry && analysis) {
           event.preventDefault();
           setShow3d(true);
         }
@@ -762,8 +763,15 @@ export function App() {
               </div>
             )}
             {mode === "real" ? (
-              <button type="button" className="open3d" disabled title="A 2D X-ray has no depth to render. 3D needs a CT scan.">
-                3D Needs a CT Scan
+              <button
+                type="button"
+                className="open3d"
+                data-testid="open-density"
+                disabled={!entry || !ready || !analysis}
+                title="Density visualization, not a CT scan"
+                onClick={() => setShow3d(true)}
+              >
+                Open Density View
               </button>
             ) : (
               <button
@@ -830,6 +838,59 @@ export function App() {
           </div>
         )}
 
+        {show3d && entry?.kind === "real" && analysis && (
+          <div className="inspector" role="dialog" aria-label="3D density view">
+            <DensityView
+              key={entry.scan.id}
+              scan={entry.scan}
+              detections={analysis.detections}
+              focusId={focusId}
+              onSelect={setFocusId}
+            />
+            <aside className="inspect-side">
+              <div className="rail-head">
+                <h2>Density View</h2>
+                <button type="button" className="texty" onClick={() => setShow3d(false)}>
+                  Done
+                </button>
+              </div>
+              <p className="muted">
+                {entry.scan.fileName}. Darker, denser material rises higher. Layers splits organic, mixed, and metal by
+                color. This is a density visualization of one 2D X-ray, not a CT scan.
+              </p>
+              <ul className="detections">
+                {analysis.detections.map((detection) => (
+                  <li key={detection.itemId}>
+                    <button
+                      type="button"
+                      className={`${detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                      onClick={() => setFocusId(detection.itemId)}
+                    >
+                      <span className="det-top">
+                        <b>{detection.label}</b>
+                        <em>{detection.confidence.toFixed(3)}</em>
+                      </span>
+                      <span className="det-sub">{detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
+                    </button>
+                  </li>
+                ))}
+                {analysis.detections.length === 0 && <li className="muted">No detections above threshold.</li>}
+              </ul>
+              <div className="actions">
+                {analysis.verdict === "clear" ? (
+                  <button type="button" className="primary safe" onClick={() => decide("cleared")}>
+                    Safe to Proceed
+                  </button>
+                ) : (
+                  <button type="button" className="primary danger" onClick={() => decide("held")}>
+                    Hold for Search
+                  </button>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+
         {dragActive && (
           <div className="drop-overlay" aria-hidden="true">
             <div>
@@ -846,7 +907,7 @@ export function App() {
           {show3d
             ? "Esc back to 2D · drag to orbit"
             : mode === "real"
-              ? "Drop images to add · click a box to select · H hold · C clear"
+              ? "Drop images to add · click a box to select · H hold · C clear · 3 density view"
               : "Click a box or the bag for 3D · H hold · C clear · 3 open 3D"}
         </span>
       </footer>

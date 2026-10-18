@@ -806,3 +806,11 @@ button:focus-visible, input:focus-visible {
   .plate.posed, .scanline, .stamp { animation: none; transition: none; }
   .plate.entering { transform: none; opacity: 1; }
 }
+
+/* Density view (real scans) */
+.three-hud .seg { display: inline-flex; gap: 4px; }
+.three-hud .seg button { padding: 6px 12px; border-radius: 8px; }
+.three-hud .seg button.on { background: #1d1d1f; color: #fff; border: 1px solid #1d1d1f; }
+.density-tag { font: 600 11px/1.2 system-ui, sans-serif; color: #fff; background: #2f62ff; padding: 3px 7px; border-radius: 6px; white-space: nowrap; transform: translateY(-10px); }
+.density-tag.threat { background: #ff3142; }
+.density-layer-tag { font: 600 11px/1 system-ui, sans-serif; color: #3a3a3c; background: rgba(255,255,255,.85); padding: 3px 7px; border-radius: 6px; transform: translate(-50%, -50%); }
