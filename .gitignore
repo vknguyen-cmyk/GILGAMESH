@@ -5,3 +5,5 @@ dist
 .vite
 *.zip
 server/data/
+training/work/
+__pycache__/

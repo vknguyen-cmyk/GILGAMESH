@@ -120,6 +120,19 @@ If no model is loaded, an image is marked **Not screened** and can only be held.
 - `format` is `yolov8` for YOLOv8, YOLO11, and most YOLO26 exports, `yolov5` for YOLOv5, or `end2end` for NMS-free exports. If it's missing, the console works it out from the output shape.
 - `resize` is `letterbox` (default, what Ultralytics and the notebook use) or `stretch`. Use `stretch` for models trained on Roboflow with "Resize: Stretch to", so images are prepared the same way at screening time.
 
+### Pulling a model trained on Roboflow
+
+`training/pull_roboflow_model.py` downloads a Roboflow-trained model's weights, exports them to ONNX at 640, checks the output layout (`yolov8` or `end2end`), and writes `public/models/xray/model.onnx` + `model.json` (keeping the old pair in `training/work/previous_model/`):
+
+```bash
+pip install -U roboflow ultralytics onnx onnxslim onnxruntime
+export ROBOFLOW_API_KEY=your_private_key
+python training/pull_roboflow_model.py                      # defaults to kavis-workspace-ezute / x-ray-baggage-detection-rtoa2 v1
+python training/pull_roboflow_model.py --weights weights.pt  # or use weights you downloaded yourself
+```
+
+If the class names are only numbers, add `--labels "Name0,Name1,..."` in training order; threats are matched by keyword the same way `train_local.py` does, or set them with `--threats`.
+
 ### Using a model trained on Roboflow
 
 Roboflow's **Download Weights** gives a PyTorch `.pt` file. Convert it to ONNX once:
