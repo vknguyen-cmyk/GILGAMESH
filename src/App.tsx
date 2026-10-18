@@ -2,16 +2,17 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { BAGS, TYPE_LABEL } from "./data/bags";
 import { analyzeBag } from "./lib/analyze";
 import { detect, loadModel, type LoadedModel } from "./lib/detector";
-import { buildRealAnalysis, loadScan } from "./lib/realScan";
+import { buildRealAnalysis, loadScan, type RealScan } from "./lib/realScan";
 import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
 import { DensityView } from "./components/DensityView";
 import { LaneView } from "./components/LaneView";
+import { toLaneScan, type LaneItem } from "./lib/laneScans";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 import { HistorySheet } from "./components/HistorySheet";
 import { PassengerCard } from "./components/PassengerCard";
-import { createRecord, fetchRecordByBag, saveDecisionByBag } from "./lib/historyApi";
+import { saveBag, scanToJpeg } from "./lib/historyApi";
 import type { PassengerRecord } from "./types/history";
 
 type Mode = "demo" | "real";
@@ -97,6 +98,38 @@ export function App() {
   const dragDepth = useRef(0);
   const realResultsRef = useRef(realResults);
   realResultsRef.current = realResults;
+  const pendingResults = useRef(new Map<string, Promise<RealResult>>());
+
+  /**
+   * Run the models on one uploaded scan, once. The console and the lane both read this
+   * result, so a scan gets the same detections on either screen.
+   */
+  function resultFor(scan: RealScan): Promise<RealResult> {
+    const cached = realResultsRef.current[scan.id];
+    if (cached) return Promise.resolve(cached);
+    let job = pendingResults.current.get(scan.id);
+    if (!job) {
+      job = detect(scan.bitmap).then(
+        (result) => {
+          setModelState({ status: "ready", model: result.model });
+          const value: RealResult = { raw: result.detections, elapsedMs: result.elapsedMs };
+          setRealResults((current) => ({ ...current, [scan.id]: value }));
+          return value;
+        },
+        (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (error instanceof Error && error.name === "ModelMissingError") {
+            setModelState({ status: "missing", error: message });
+          }
+          const value: RealResult = { error: message };
+          setRealResults((current) => ({ ...current, [scan.id]: value }));
+          return value;
+        },
+      );
+      pendingResults.current.set(scan.id, job);
+    }
+    return job;
+  }
 
   const entries = mode === "demo" ? SIM_ENTRIES : realEntries;
   const index = indexes[mode];
@@ -115,6 +148,26 @@ export function App() {
     if (!realResult || !("raw" in realResult) || !model) return null;
     return buildRealAnalysis(entry.scan, realResult.raw, model, effectiveThreshold, realResult.elapsedMs);
   }, [entry, realResult, model, effectiveThreshold]);
+
+  // Analyze every upload as soon as it arrives, so the lane can carry it without waiting for the console.
+  useEffect(() => {
+    for (const item of realEntries) if (item.kind === "real") void resultFor(item.scan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realEntries]);
+
+  /** Uploads as bags: same analysis and same alarm threshold as the console. */
+  const laneItems: LaneItem[] = useMemo(
+    () =>
+      realEntries.flatMap((item): LaneItem[] => {
+        if (item.kind !== "real") return [];
+        const result = realResults[item.scan.id];
+        if (!result || !model) return [{ id: item.scan.id, state: "analyzing" }];
+        if ("error" in result) return [{ id: item.scan.id, state: "failed" }];
+        const laneAnalysis = buildRealAnalysis(item.scan, result.raw, model, effectiveThreshold, result.elapsedMs);
+        return [{ id: item.scan.id, state: "ready", scan: toLaneScan(item.scan, laneAnalysis) }];
+      }),
+    [realEntries, realResults, model, effectiveThreshold],
+  );
 
   function setIndex(update: (value: number) => number) {
     setIndexes((current) => ({ ...current, [mode]: update(current[mode]) }));
@@ -138,13 +191,14 @@ export function App() {
     if (mode === "real" && modelState.status === "idle") warmModel();
   }, [mode, modelState.status]);
 
+  // Look up (or create) the traveler and flight for the bag on screen.
   useEffect(() => {
-    if (!entry || entry.kind !== "sim") {
+    if (!entry || entry.kind !== "real") {
       setPassenger(null);
       return;
     }
     let cancelled = false;
-    fetchRecordByBag(entry.bag.id)
+    saveBag(entry.scan.id, { scan: { caption: entry.scan.fileName } })
       .then((record) => {
         if (!cancelled) setPassenger(record);
       })
@@ -208,30 +262,10 @@ export function App() {
           }, wait),
         );
       };
-      const cached = realResultsRef.current[scan.id];
-      const job =
-        cached && "raw" in cached
-          ? Promise.resolve(cached)
-          : detect(scan.bitmap).then((result) => {
-              setModelState({ status: "ready", model: result.model });
-              return { raw: result.detections, elapsedMs: result.elapsedMs };
-            });
-      job.then(
-        (result) => {
-          if (cancelled) return;
-          setRealResults((current) => ({ ...current, [scan.id]: result }));
-          finish("ready");
-        },
-        (error: unknown) => {
-          if (cancelled) return;
-          const message = error instanceof Error ? error.message : String(error);
-          setRealResults((current) => ({ ...current, [scan.id]: { error: message } }));
-          if (error instanceof Error && error.name === "ModelMissingError") {
-            setModelState({ status: "missing", error: message });
-          }
-          finish("failed");
-        },
-      );
+      resultFor(scan).then((result) => {
+        if (cancelled) return;
+        finish("error" in result ? "failed" : "ready");
+      });
     }
 
     return () => {
@@ -313,42 +347,20 @@ export function App() {
     setConfirmClear(false);
     setShow3d(false);
 
-    if (entry.kind === "sim") {
-      void saveDecisionByBag(entry.bag.id, {
-        action,
-        verdict,
-        threatLabel: top?.label ?? null,
-        confidence: top?.confidence ?? null,
-      })
-        .then(() => setHistoryTick((value) => value + 1))
-        .catch(() => undefined);
-    } else {
-      void createRecord({
-        bagId: meta.id,
-        passenger: {
-          name: "Anonymous traveler",
-          idNumber: `TMP-${meta.id}`,
-          photoUrl: "/history/avatars/anonymous.svg",
-        },
-        flight: {
-          number: "TBD",
-          from: "—",
-          to: "—",
-          date: new Date().toISOString().slice(0, 10),
-        },
-        scan: {
-          imageUrl: "/history/scans/placeholder.svg",
-          view: "single",
-          caption: meta.detail,
-          dataUrl: null,
-        },
-        screening: {
-          verdict,
-          action,
-          threatLabel: top?.label ?? null,
-          confidence: top?.confidence ?? null,
-          screenedAt: new Date().toISOString(),
-        },
+    // Store the decision and the scan the officer saw, with its boxes, in the history server.
+    if (entry.kind === "real") {
+      const scan = entry.scan;
+      const boxes = (analysis?.detections ?? [])
+        .filter((d) => d.box)
+        .map((d) => ({
+          ...d.box!,
+          kind: (d.uncertain ? "review" : d.threat ? "threat" : "benign") as "threat" | "review" | "benign",
+          label: d.label,
+          score: d.confidence,
+        }));
+      void saveBag(scan.id, {
+        scan: { dataUrl: scanToJpeg(scan.bitmap, scan.width, scan.height, boxes), caption: scan.fileName },
+        screening: { verdict, action, threatLabel: top?.label ?? null, confidence: top?.confidence ?? null, source: "console" },
       })
         .then(() => setHistoryTick((value) => value + 1))
         .catch(() => undefined);
@@ -471,17 +483,6 @@ export function App() {
   }
   const stateClass = ready ? analysis.verdict : phase;
 
-  let modelLine = "Simulation lane · scores are scripted for the booth";
-  if (mode === "real") {
-    if (modelState.status === "ready") {
-      modelLine = `Real images · ${modelState.model.config.name} · prototype, an officer makes the final call`;
-    } else if (modelState.status === "missing") {
-      modelLine = "Real images · no X-ray model loaded";
-    } else {
-      modelLine = "Real images · loading model";
-    }
-  }
-
   const scanLines = isReal ? REAL_SCAN_LINES : SCAN_LINES;
 
   return (
@@ -502,7 +503,6 @@ export function App() {
           </span>
           <div>
             <strong>GILGAMESH</strong>
-            <span>Terminal 3 · Lane 04 · Carry-on</span>
           </div>
         </div>
         <div className="view-switch" role="group" aria-label="Screen">
@@ -542,7 +542,13 @@ export function App() {
       </header>
 
       {screen === "lane" ? (
-        <LaneView />
+        <LaneView
+          items={laneItems}
+          onAddFiles={(files) => void addFiles(files)}
+          sampleCount={samples.length}
+          onUseSamples={() => void loadSamples()}
+          onRecord={() => setHistoryTick((value) => value + 1)}
+        />
       ) : (
       <div className="workspace">
         <aside className="rail queue">
@@ -1035,22 +1041,11 @@ export function App() {
           </div>
         )}
 
-        <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
       </div>
       )}
 
-      <footer className="bottombar">
-        <span>{modelLine}</span>
-        <span className="keys">
-          {screen === "lane"
-            ? "Drag to orbit · click a held bag's blue node for its 3D view · drop images to add them to the belt"
-            : show3d
-            ? "Esc back to 2D · drag to orbit"
-            : mode === "real"
-              ? "Drop images to add · click a box to select · H hold · C clear · 3 density view"
-              : "Click a box or the bag for 3D · H hold · C clear · 3 open 3D"}
-        </span>
-      </footer>
+      <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
+
     </div>
   );
 }

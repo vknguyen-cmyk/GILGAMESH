@@ -65,6 +65,8 @@ interface LaneOptions {
   nextScan: () => LaneScan | null;
   onChange: (snapshot: LaneSnapshot) => void;
   onInspect: (entry: LaneLogEntry) => void;
+  /** Called once per bag when its result is in. */
+  onResult?: (entry: LaneLogEntry) => void;
   reducedMotion: boolean;
 }
 
@@ -276,27 +278,6 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
     const stop = box(1.3, 0.3, 0.08, 0xff3b30, { rough: 0.5 });
     stop.position.set(DIVERT_X, BELT_Y + 0.1, z1 - 0.02);
     scene.add(stop);
-    const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 160;
-    const g = c.getContext("2d")!;
-    g.fillStyle = "#ffffff";
-    g.fillRect(0, 0, 512, 160);
-    g.fillStyle = "#ff3b30";
-    g.fillRect(0, 0, 18, 160);
-    g.fillStyle = "#1d1d1f";
-    g.font = "700 64px -apple-system, system-ui, sans-serif";
-    g.fillText("Bag search", 48, 92);
-    g.fillStyle = "#6e6e73";
-    g.font = "500 30px -apple-system, system-ui, sans-serif";
-    g.fillText("Held for an officer", 50, 136);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const signPole = box(0.06, 2.0, 0.06, 0xaeaeb2, { metal: 0.5 });
-    signPole.position.set(DIVERT_X + 0.95, 1.0, z1 - 0.1);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.5), new THREE.MeshBasicMaterial({ map: tex }));
-    sign.position.set(DIVERT_X + 0.95, 2.1, z1 - 0.06);
-    scene.add(signPole, sign);
   }
 
   /* Diverter */
@@ -417,7 +398,8 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
     scene.add(g);
     return {
       serial,
-      label: `B-${2040 + serial}`,
+      // The bag carries its scan's ID, so the lane, console and history all name it the same.
+      label: scan.id,
       spec,
       scan,
       group: g,
@@ -734,6 +716,7 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
       if (bag.state === "done" && !bag.reported && now - bag.doneAt > ANALYSIS_DELAY) {
         bag.reported = true;
         dirty = true;
+        options.onResult?.(entryOf(bag));
         if (bag.scan.verdict === "clear") {
           cleared++;
           lightColor.set(0x34c759);

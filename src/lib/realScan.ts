@@ -17,7 +17,8 @@ export interface RealScan {
 
 const SAMPLE_MAX = 384;
 
-let counter = 0;
+// Start each session at a random number so bag IDs stay unique in the history server.
+let counter = 100 + Math.floor(Math.random() * 8000);
 
 export async function loadScan(file: File): Promise<RealScan> {
   if (!file.type.startsWith("image/")) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PassengerRecord } from "../types/history";
-import { fetchRecords, resetRecords, scanImageSrc } from "../lib/historyApi";
+import { fetchRecords, photoSrc, resetRecords } from "../lib/historyApi";
 import { PassengerCard } from "./PassengerCard";
 
 interface HistorySheetProps {
@@ -52,12 +52,11 @@ export function HistorySheet({ open, onClose, refreshKey }: HistorySheetProps) {
               Done
             </button>
           </div>
-          <p className="muted pad">Passenger, flight, and stored 2D scan for each bag.</p>
+          <p className="muted pad">Each screened bag: traveler, flight, and the 2D scan the officer saw. Travelers are demo identities.</p>
           {loading && <p className="muted pad">Loading…</p>}
           {error && (
             <div className="pad">
               <p className="note">{error}</p>
-              <p className="muted">Start the API with npm run dev (it boots the history server).</p>
             </div>
           )}
           <ul className="history-rows">
@@ -68,7 +67,7 @@ export function HistorySheet({ open, onClose, refreshKey }: HistorySheetProps) {
                   className={selectedId === record.id ? "on" : ""}
                   onClick={() => setSelectedId(record.id)}
                 >
-                  <img src={record.passenger.photoUrl} alt="" />
+                  <img src={photoSrc(record)} alt="" />
                   <span>
                     <b>{record.passenger.name}</b>
                     <em>
@@ -85,10 +84,13 @@ export function HistorySheet({ open, onClose, refreshKey }: HistorySheetProps) {
               type="button"
               className="ghost"
               onClick={() => {
-                void resetRecords().then(() => fetchRecords().then(setRecords));
+                void resetRecords()
+                  .then(() => fetchRecords().then(setRecords))
+                  .then(() => setSelectedId(null))
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
               }}
             >
-              Reset Demo History
+              Clear History
             </button>
           </div>
         </aside>
@@ -96,9 +98,6 @@ export function HistorySheet({ open, onClose, refreshKey }: HistorySheetProps) {
           {selected ? (
             <>
               <PassengerCard record={selected} />
-              <div className="history-scan-large">
-                <img src={scanImageSrc(selected)} alt={`Stored scan ${selected.bagId}`} />
-              </div>
               <dl className="history-meta">
                 <div>
                   <dt>Bag</dt>
@@ -121,6 +120,10 @@ export function HistorySheet({ open, onClose, refreshKey }: HistorySheetProps) {
                   </dd>
                 </div>
                 <div>
+                  <dt>Screened on</dt>
+                  <dd>{selected.screening.source === "lane" ? "Lane" : selected.screening.source === "console" ? "Console" : "—"}</dd>
+                </div>
+                <div>
                   <dt>Screened</dt>
                   <dd>
                     {selected.screening.screenedAt
@@ -133,7 +136,7 @@ export function HistorySheet({ open, onClose, refreshKey }: HistorySheetProps) {
           ) : (
             <div className="empty">
               <h2>No records yet</h2>
-              <p>Screen a bag to store passenger and scan history.</p>
+              <p>{error ? "History needs its server." : "Screen a bag on the Lane or the Console and it appears here."}</p>
             </div>
           )}
         </section>
