@@ -183,11 +183,11 @@ export function renderRealXray(
   const drawH = scan.height * scale;
   const x = (width - drawW) / 2;
   const y = (height - drawH) / 2;
-  const radius = Math.min(18, drawW / 8, drawH / 8);
+  const radius = Math.min(10, drawW / 8, drawH / 8);
   ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
-  ctx.shadowBlur = 40;
-  ctx.shadowOffsetY = 16;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 2;
   ctx.fillStyle = `rgb(${PAPER.join(",")})`;
   ctx.beginPath();
   ctx.roundRect(x, y, drawW, drawH, radius);

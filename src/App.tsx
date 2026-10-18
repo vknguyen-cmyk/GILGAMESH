@@ -7,7 +7,6 @@ import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
 import { DensityView } from "./components/DensityView";
-import { Backdrop } from "./components/Backdrop";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 
 type Mode = "demo" | "real";
@@ -386,7 +385,7 @@ export function App() {
   if (entry && phase === "entering") verdictText = isReal ? "Image entering lane" : "Bag entering lane";
   if (entry && phase === "scanning") verdictText = isReal ? "Running threat detector" : "Analyzing dual-energy scan";
   if (entry && phase === "failed") verdictText = "Not screened · model unavailable";
-  if (ready && analysis.verdict === "clear") verdictText = "No threats found · officer confirms";
+  if (ready && analysis.verdict === "clear") verdictText = "No threats found";
   if (ready && analysis.verdict === "review") {
     const weak = analysis.detections.find((d) => d.uncertain);
     verdictText = weak ? `Look closer · possible ${weak.label} ${weak.confidence.toFixed(2)}` : "Look closer";
@@ -419,7 +418,6 @@ export function App() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <Backdrop image={entry?.kind === "real" ? entry.scan.bitmap : null} />
       <header className="topbar">
         <div className="brand">
           <span className="mark" aria-hidden="true">
@@ -430,7 +428,7 @@ export function App() {
           </span>
           <div>
             <strong>GILGAMESH</strong>
-            <span>Lane Screening</span>
+            <span>Terminal 3 · Lane 04 · Carry-on</span>
           </div>
         </div>
         <div className="station">
@@ -641,6 +639,7 @@ export function App() {
                 <strong>{verdictText}</strong>
                 {ready && (
                   <span>
+                    {analysis.verdict === "clear" ? "Officer confirms before clearing · " : ""}
                     {analysis.detections.length} object{analysis.detections.length === 1 ? "" : "s"} ·{" "}
                     {analysis.threatCount} threat
                     {analysis.threatCount === 1 ? "" : "s"}

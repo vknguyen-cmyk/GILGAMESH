@@ -165,7 +165,7 @@ export function mountDensityScene(
   // Base plate the scan sits on.
   const plate = new THREE.Mesh(
     new THREE.PlaneGeometry(W * 1.04, D * 1.04),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.16 }),
+    new THREE.MeshStandardMaterial({ color: 0xe8e8ed, roughness: 0.9 }),
   );
   plate.rotation.x = -Math.PI / 2;
   plate.position.y = -0.002;
@@ -218,7 +218,7 @@ export function mountDensityScene(
     pts.userData.layer = name;
     const frame = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2)),
-      new THREE.LineBasicMaterial({ color: 0xc8d4ee, transparent: true, opacity: 0.55 }),
+      new THREE.LineBasicMaterial({ color: 0x8a94a6, transparent: true, opacity: 0.6 }),
     );
     const sheet = new THREE.Group();
     sheet.add(pts, frame);
