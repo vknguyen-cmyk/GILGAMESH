@@ -1,6 +1,6 @@
 # GILGAMESH
 
-An AI-powered carry-on X-ray screening console for airport security. Officers upload X-ray scans, two YOLO models running in the browser flag knives and scissors, and each scan rides a 3D screening lane as a bag. Flagged bags are pushed aside to bag search, where officers can open a 3D density view of the scan and the owner's details.
+An AI-powered carry-on X-ray screening console for airport security. Officers upload X-ray scans, two YOLO models running in the browser flag prohibited items, and each scan rides a 3D screening lane as a bag. Flagged bags are pushed aside to bag search, where officers can open a 3D density view of the scan and the owner's details.
 
 ## How It Works
 
