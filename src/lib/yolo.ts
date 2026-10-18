@@ -238,6 +238,53 @@ export function decodeYolo(
   return out;
 }
 
+/** IoU of two boxes normalized to the source image as { x, y, w, h } (top-left corner plus size). */
+export function boxIou(a: Pick<RawDetection, "x" | "y" | "w" | "h">, b: Pick<RawDetection, "x" | "y" | "w" | "h">): number {
+  const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const inter = ix * iy;
+  const union = a.w * a.h + b.w * b.h - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+/**
+ * Merge two models' detections with cross-model Weighted Boxes Fusion.
+ * All detections are pooled and visited highest score first. One that overlaps a kept
+ * detection (IoU ≥ iouThreshold) is fused into it: the box moves to the confidence-weighted
+ * average of the two, while the kept detection's higher score, label and classId stay as they
+ * are, so agreement between models never inflates a score. Anything else is kept as a new detection.
+ */
+export function mergeModelDetections(
+  detectionsA: RawDetection[],
+  detectionsB: RawDetection[],
+  iouThreshold = 0.45,
+): RawDetection[] {
+  const pooled = [...detectionsA, ...detectionsB].sort((a, b) => b.score - a.score);
+  const kept: RawDetection[] = [];
+  for (const candidate of pooled) {
+    let match: RawDetection | null = null;
+    let bestIou = iouThreshold;
+    for (const existing of kept) {
+      const overlap = boxIou(existing, candidate);
+      if (overlap >= bestIou) {
+        bestIou = overlap;
+        match = existing;
+      }
+    }
+    if (!match) {
+      kept.push({ ...candidate });
+      continue;
+    }
+    const total = match.score + candidate.score;
+    if (total <= 0) continue;
+    match.x = (match.x * match.score + candidate.x * candidate.score) / total;
+    match.y = (match.y * match.score + candidate.y * candidate.score) / total;
+    match.w = (match.w * match.score + candidate.w * candidate.score) / total;
+    match.h = (match.h * match.score + candidate.h * candidate.score) / total;
+  }
+  return kept.sort((a, b) => b.score - a.score);
+}
+
 /**
  * Pack letterboxed RGBA pixels (size × size) into a CHW float tensor in 0–1.
  * The browser fills the RGBA buffer by drawing onto a canvas.

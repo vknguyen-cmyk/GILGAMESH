@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="X-ray scan B-1904">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4f1ea"/>
+      <stop offset="100%" stop-color="#e8e0d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#g)"/>
+  <rect x="90" y="70" width="460" height="220" rx="28" fill="none" stroke="#1c3f78" stroke-width="3"/>
+  <rect x="150" y="120" width="220" height="90" rx="8" fill="#3c7a52" opacity="0.55"/>
+  <rect x="320" y="150" width="70" height="95" rx="6" fill="#007aff" opacity="0.8"/>
+  <rect x="420" y="200" width="70" height="50" rx="16" fill="#ff9500" opacity="0.55"/>
+  <text x="24" y="36" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="18" font-weight="600" fill="#1c1c1e">B-1904</text>
+  <text x="24" y="336" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="13" fill="#8e8e93">Stored 2D X-ray · booth archive</text>
+</svg>

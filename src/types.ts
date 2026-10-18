@@ -62,12 +62,15 @@ export interface Detection {
   shape?: ItemShape;
   /** Real scans only: the model's box, normalized to the image (0–1). */
   box?: Rect;
+  /** Real scans only: a threat class scored below the alarm threshold but high enough to look at. */
+  uncertain?: boolean;
 }
 
 export interface Analysis {
   bagId: string;
   detections: Detection[];
-  verdict: "clear" | "threat";
+  /** "review": no confident threat, but a weak threat-class hit the officer should look at. */
+  verdict: "clear" | "review" | "threat";
   threatCount: number;
   elapsedMs: number;
 }
@@ -75,7 +78,7 @@ export interface Analysis {
 export interface Decision {
   bagId: string;
   action: "cleared" | "held";
-  verdict: "clear" | "threat" | "unscreened";
+  verdict: "clear" | "review" | "threat" | "unscreened";
   at: number;
 }
 

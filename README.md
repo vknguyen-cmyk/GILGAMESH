@@ -3,7 +3,9 @@
 Carry-on X-ray screening console for a hackathon demo. Light Apple-style UI with SF system fonts. It has two lanes:
 
 - **Demo lane:** scripted bags slide into a dual-view 2D scan. Threats are boxed in red with a confidence score, a clear bag is marked green as **Safe to proceed**, and any bag opens as a 3D render.
-- **Real X-rays:** drop real baggage X-ray images onto the console. A YOLO model runs in the browser on this laptop, boxes what it finds, and gives the same verdict. No server, no API key, no Wi-Fi needed at the booth.
+- **Real X-rays:** drop real baggage X-ray images onto the console. A YOLO model runs in the browser on this laptop, boxes what it finds, and gives the same verdict.
+
+A thin history API stores each bag’s passenger (anonymous photo, name, ID), flight ticket, and a 2D scan image so you can reopen past cases.
 
 ## Run
 
@@ -12,12 +14,20 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL. Production build:
+That starts both the Vite UI (`:5173`) and the history API (`:3001`). Open the printed local URL. Production build:
 
 ```bash
 npm run build
 npm run preview
 ```
+
+## The 3D lane
+
+The console opens on **Lane**: a 3D belt and X-ray tunnel. Every bag carries a real scan, screened in the browser by the same models and thresholds as the console, and its scan builds on the monitor as it crosses the beam. Bags the models flag (threat or "look closer") are pushed off to a bag-search belt. Click the pulsing blue node beside a held bag, or its row in the Lane Log, to open a 3D density view of its scan: darker, denser pixels rise higher, with the models' boxes as 3D frames. It is a visualization of one 2D X-ray, not a CT scan.
+
+The lane loops the scans in `public/samples/` (listed in `samples.json`); drop your own images on it or use **Add X-ray images** and they ride through next. The 3D bags are animation; their look is picked to match each scan's real result. Code: `src/components/LaneView.tsx`, `src/lib/laneScene.ts`, `src/lib/inspectScene.ts`.
+
+Bundled samples come from public research datasets (SIXray, OPIXray) and are for demonstration only; some carry annotation marks from the original images. Swap in images from your own dataset's test split for a cleaner demo.
 
 ## Walk the demo lane
 
@@ -27,6 +37,20 @@ npm run preview
 4. Later bags include a knife and a firearm component. **Override clear** asks before an officer sends a threat down the lane.
 
 Keys: `H` hold, `C` clear, `3` open 3D, `Esc` back to the X-ray.
+
+Open **History** in the top bar to browse stored passenger cards, flights, and 2D scans. Clearing or holding a demo bag writes the decision to the API.
+
+## History API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/records` | List luggage history |
+| `GET` | `/api/records/by-bag/:bagId` | Passenger record for a bag |
+| `PATCH` | `/api/records/by-bag/:bagId/decision` | Save cleared / held |
+| `POST` | `/api/records` | Create a record |
+| `POST` | `/api/records/reset` | Restore demo seed data |
+
+Photos are anonymous placeholders. Seed data lives in `server/seed.js`; runtime writes go to `server/data/records.json`.
 
 ## Screen real X-ray images
 
@@ -82,12 +106,23 @@ yolo export model=weights.pt format=onnx imgsz=640 simplify=True
 
 Copy the resulting `weights.onnx` to `public/models/xray/model.onnx`, then set `"resize": "stretch"` and the class names from Roboflow's **Classes & Tags** in `model.json`.
 
+### A second model (optional)
+
+If `public/models/xray-pretrained/` holds a `model.json` and `model.onnx`, the console runs both models on every scan, in parallel, and merges their boxes with cross-model Weighted Boxes Fusion (`mergeModelDetections` in `src/lib/yolo.ts`): overlapping boxes (IoU ≥ 0.45) are averaged by confidence, and the higher score and label are kept so agreement never inflates a score. A label is a threat if either model lists it. Remove the folder to go back to one model.
+
+The bundled second model is the YOLOv8s from [tulsiprasadmohanty/Xray-luggage-and-suitcase-object-detection-system-](https://github.com/tulsiprasadmohanty/Xray-luggage-and-suitcase-object-detection-system-) (`model/best.pt`, MIT), trained at 480px on [X-ray baggage detection v1](https://universe.roboflow.com/malek-mhnrl/x-ray-baggage-detection/dataset/1) by Malek (CC BY 4.0), exported to ONNX at 640px:
+
+```bash
+yolo export model=best.pt format=onnx imgsz=640 simplify=True opset=17
+```
+
 ## What's real and what isn't
 
 - **Demo lane:** imagery and scores are scripted so the booth run is repeatable. `src/lib/analyze.ts` returns them.
+- **History:** passenger photos are anonymous placeholders, not real faces. Flight and ID fields are demo data.
 - **Real lane:** boxes, labels, and confidence come from the model (`src/lib/detector.ts`, decoding in `src/lib/yolo.ts`). Accuracy depends entirely on the training data; expect it to drop on scanners the model never saw.
 - **Material** on real scans is an estimate from the pseudo-color inside each box: orange is organic, green is mixed, blue is metal. Grayscale scans show "material n/a", and the Organic and Metal filters turn off for them.
-- **3D** is only for the demo lane. A single 2D X-ray has no depth to reconstruct; that needs a CT scan.
+- **3D:** the demo lane renders its scripted bags in 3D. Real scans get a density view instead: darker, denser pixels rise higher. A single 2D X-ray has no depth to reconstruct, so this is a visualization, not a CT scan.
 - **One view:** real images are screened as a single view. Dual-view fusion is a next step.
 - This is a prototype. An officer makes the final call.
 

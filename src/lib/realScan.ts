@@ -52,13 +52,13 @@ export async function loadScan(file: File): Promise<RealScan> {
   };
 }
 
-type Tone = Material | "background" | "gray";
+export type Tone = Material | "background" | "gray";
 
 /**
  * Classify one pixel by the pseudo-color a dual-energy scanner paints it.
  * Orange is organic, green is mixed, blue is metal. Near-white is empty belt.
  */
-function toneOf(r: number, g: number, b: number): Tone {
+export function toneOf(r: number, g: number, b: number): Tone {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   if (min > 232) return "background";
@@ -116,6 +116,9 @@ export function estimateMaterial(scan: RealScan, box: Rect): Material | "unknown
  * Build the console's Analysis from raw detections and the current alarm threshold.
  * Re-run on every slider move; it doesn't call the model again.
  */
+/** Threat-class hits at or above this score (but under the alarm) are flagged "look closer". */
+export const REVIEW_FLOOR = 0.15;
+
 export function buildRealAnalysis(
   scan: RealScan,
   raw: RawDetection[],
@@ -123,25 +126,36 @@ export function buildRealAnalysis(
   threshold: number,
   elapsedMs: number,
 ): Analysis {
+  const floor = Math.min(REVIEW_FLOOR, threshold);
   const detections: Detection[] = raw
-    .filter((entry) => entry.score >= threshold)
-    .map((entry, index) => {
+    .map((entry, index) => ({ entry, index, threat: model.threatSet.has(entry.label.toLowerCase()) }))
+    // Everything above the alarm, plus weaker threat-class hits so a near-miss is never shown as clear.
+    .filter(({ entry, threat }) => entry.score >= threshold || (threat && entry.score >= floor))
+    .map(({ entry, index, threat }) => {
       const box = { x: entry.x, y: entry.y, w: entry.w, h: entry.h };
       return {
         itemId: `${scan.id}-${index}`,
         label: entry.label,
         confidence: entry.score,
-        threat: model.threatSet.has(entry.label.toLowerCase()),
+        threat,
+        uncertain: entry.score < threshold,
         material: estimateMaterial(scan, box),
         box,
       };
     })
-    .sort((a, b) => Number(b.threat) - Number(a.threat) || b.confidence - a.confidence);
-  const threatCount = detections.filter((entry) => entry.threat).length;
+    .sort(
+      (a, b) =>
+        // Confident detections first, then threats, then by score.
+        Number(!b.uncertain) - Number(!a.uncertain) ||
+        Number(b.threat) - Number(a.threat) ||
+        b.confidence - a.confidence,
+    );
+  const threatCount = detections.filter((entry) => entry.threat && !entry.uncertain).length;
+  const reviewCount = detections.filter((entry) => entry.uncertain).length;
   return {
     bagId: scan.id,
     detections,
-    verdict: threatCount > 0 ? "threat" : "clear",
+    verdict: threatCount > 0 ? "threat" : reviewCount > 0 ? "review" : "clear",
     threatCount,
     elapsedMs,
   };
@@ -162,18 +176,32 @@ export function renderRealXray(
   filter: MaterialFilter,
 ): Rect {
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = `rgb(${PAPER.join(",")})`;
-  ctx.fillRect(0, 0, width, height);
 
-  const pad = 10;
+  // The scan floats on the glass plate as a rounded card with a soft shadow.
+  const pad = 28;
   const scale = Math.min((width - pad * 2) / scan.width, (height - pad * 2) / scan.height);
   const drawW = scan.width * scale;
   const drawH = scan.height * scale;
   const x = (width - drawW) / 2;
   const y = (height - drawH) / 2;
+  const radius = Math.min(10, drawW / 8, drawH / 8);
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = `rgb(${PAPER.join(",")})`;
+  ctx.beginPath();
+  ctx.roundRect(x, y, drawW, drawH, radius);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, drawW, drawH, radius);
+  ctx.clip();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(scan.bitmap, x, y, drawW, drawH);
+  ctx.restore();
 
   if (filter !== "all" && scan.colorful) {
     const dpr = ctx.getTransform().a || 1;

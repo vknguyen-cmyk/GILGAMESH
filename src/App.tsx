@@ -6,7 +6,13 @@ import { buildRealAnalysis, loadScan } from "./lib/realScan";
 import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
+import { DensityView } from "./components/DensityView";
+import { LaneView } from "./components/LaneView";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
+import { HistorySheet } from "./components/HistorySheet";
+import { PassengerCard } from "./components/PassengerCard";
+import { createRecord, fetchRecordByBag, saveDecisionByBag } from "./lib/historyApi";
+import type { PassengerRecord } from "./types/history";
 
 type Mode = "demo" | "real";
 
@@ -56,8 +62,15 @@ function entryMeta(entry: PaneSource) {
   return { id: scan.id, kind: "X-ray image", detail: scan.fileName, size: `${scan.width}×${scan.height}` };
 }
 
+interface SampleScan {
+  file: string;
+  name?: string;
+}
+
 export function App() {
-  const [mode, setMode] = useState<Mode>("demo");
+  const [mode, setMode] = useState<Mode>("real");
+  /** Lane: the 3D screening lane. Console: one scan at a time with full findings. */
+  const [screen, setScreen] = useState<"lane" | "console">("lane");
   const [realEntries, setRealEntries] = useState<PaneSource[]>([]);
   const [indexes, setIndexes] = useState<Record<Mode, number>>({ demo: 0, real: 0 });
   const [decisionsByMode, setDecisionsByMode] = useState<Record<Mode, Decision[]>>({ demo: [], real: [] });
@@ -76,6 +89,9 @@ export function App() {
   const [threshold, setThreshold] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyTick, setHistoryTick] = useState(0);
+  const [passenger, setPassenger] = useState<PassengerRecord | null>(null);
   const lock = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
@@ -121,6 +137,24 @@ export function App() {
   useEffect(() => {
     if (mode === "real" && modelState.status === "idle") warmModel();
   }, [mode, modelState.status]);
+
+  useEffect(() => {
+    if (!entry || entry.kind !== "sim") {
+      setPassenger(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRecordByBag(entry.bag.id)
+      .then((record) => {
+        if (!cancelled) setPassenger(record);
+      })
+      .catch(() => {
+        if (!cancelled) setPassenger(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentKey, mode]);
 
   useEffect(() => {
     lock.current = false;
@@ -211,11 +245,16 @@ export function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (screen !== "console") return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
       if (event.key === "Escape") {
         if (confirmClear) {
           setConfirmClear(false);
+          return;
+        }
+        if (showHistory) {
+          setShowHistory(false);
           return;
         }
         if (show3d) setShow3d(false);
@@ -224,7 +263,7 @@ export function App() {
       }
       if (event.key === "3" || event.key === "Enter") {
         if (show3d && event.key === "Enter" && confirmClear) return;
-        if (!show3d && phase === "ready" && entry?.kind === "sim") {
+        if (!show3d && phase === "ready" && entry && analysis) {
           event.preventDefault();
           setShow3d(true);
         }
@@ -252,25 +291,20 @@ export function App() {
     setRun((value) => value + 1);
   }
 
-  function switchMode(next: Mode) {
-    if (next === mode) return;
-    setMode(next);
-    setFilter("all");
-    setUploadNote(null);
-  }
-
   function decide(action: "cleared" | "held") {
     if (lock.current || !entry || (phase !== "ready" && phase !== "failed")) return;
     if (phase === "failed" && action === "cleared") return;
     lock.current = true;
     const meta = entryMeta(entry);
+    const verdict = phase === "ready" && analysis ? analysis.verdict : "unscreened";
+    const top = analysis?.detections.find((item) => item.threat) ?? null;
     setDecisionsByMode((current) => ({
       ...current,
       [mode]: [
         {
           bagId: meta.id,
           action,
-          verdict: phase === "ready" && analysis ? analysis.verdict : "unscreened",
+          verdict,
           at: Date.now(),
         },
         ...current[mode],
@@ -278,12 +312,54 @@ export function App() {
     }));
     setConfirmClear(false);
     setShow3d(false);
+
+    if (entry.kind === "sim") {
+      void saveDecisionByBag(entry.bag.id, {
+        action,
+        verdict,
+        threatLabel: top?.label ?? null,
+        confidence: top?.confidence ?? null,
+      })
+        .then(() => setHistoryTick((value) => value + 1))
+        .catch(() => undefined);
+    } else {
+      void createRecord({
+        bagId: meta.id,
+        passenger: {
+          name: "Anonymous traveler",
+          idNumber: `TMP-${meta.id}`,
+          photoUrl: "/history/avatars/anonymous.svg",
+        },
+        flight: {
+          number: "TBD",
+          from: "—",
+          to: "—",
+          date: new Date().toISOString().slice(0, 10),
+        },
+        scan: {
+          imageUrl: "/history/scans/placeholder.svg",
+          view: "single",
+          caption: meta.detail,
+          dataUrl: null,
+        },
+        screening: {
+          verdict,
+          action,
+          threatLabel: top?.label ?? null,
+          confidence: top?.confidence ?? null,
+          screenedAt: new Date().toISOString(),
+        },
+      })
+        .then(() => setHistoryTick((value) => value + 1))
+        .catch(() => undefined);
+    }
+
     setIndex((current) => current + 1);
   }
 
   function requestClear() {
     if (!analysis || phase !== "ready") return;
-    if (analysis.verdict === "threat") {
+    if (analysis.verdict !== "clear") {
       setConfirmClear(true);
       return;
     }
@@ -294,6 +370,25 @@ export function App() {
     if (phase !== "ready") return;
     setFocusId(id);
     if (entry?.kind === "sim") setShow3d(true);
+  }
+
+  const [samples, setSamples] = useState<SampleScan[]>([]);
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}samples/samples.json`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: SampleScan[]) => setSamples(Array.isArray(list) ? list : []))
+      .catch(() => setSamples([]));
+  }, []);
+
+  async function loadSamples() {
+    const files = await Promise.all(
+      samples.map(async (sample) => {
+        const res = await fetch(`${import.meta.env.BASE_URL}samples/${sample.file}`);
+        const blob = await res.blob();
+        return new File([blob], sample.name ?? sample.file, { type: blob.type });
+      }),
+    );
+    await addFiles(files);
   }
 
   async function addFiles(list: FileList | File[]) {
@@ -322,6 +417,7 @@ export function App() {
   }
 
   function onDragEnter(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     dragDepth.current += 1;
@@ -329,18 +425,21 @@ export function App() {
   }
 
   function onDragOver(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
   }
 
   function onDragLeave(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (dragDepth.current === 0) setDragActive(false);
   }
 
   function onDrop(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     dragDepth.current = 0;
@@ -360,7 +459,11 @@ export function App() {
   if (entry && phase === "entering") verdictText = isReal ? "Image entering lane" : "Bag entering lane";
   if (entry && phase === "scanning") verdictText = isReal ? "Running threat detector" : "Analyzing dual-energy scan";
   if (entry && phase === "failed") verdictText = "Not screened · model unavailable";
-  if (ready && analysis.verdict === "clear") verdictText = "Safe to proceed";
+  if (ready && analysis.verdict === "clear") verdictText = "No threats found";
+  if (ready && analysis.verdict === "review") {
+    const weak = analysis.detections.find((d) => d.uncertain);
+    verdictText = weak ? `Look closer · possible ${weak.label} ${weak.confidence.toFixed(2)}` : "Look closer";
+  }
   if (ready && analysis.verdict === "threat") {
     verdictText = topThreat
       ? `Threat · ${topThreat.label} ${topThreat.confidence.toFixed(3)}`
@@ -383,7 +486,7 @@ export function App() {
 
   return (
     <div
-      className={`app ${ready && analysis.verdict === "threat" ? "is-threat" : ""} ${ready && analysis.verdict === "clear" ? "is-clear" : ""}`}
+      className={`app ${ready && analysis.verdict === "threat" ? "is-threat" : ""} ${ready && analysis.verdict === "clear" ? "is-clear" : ""} ${ready && analysis.verdict === "review" ? "is-review" : ""}`}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -399,8 +502,16 @@ export function App() {
           </span>
           <div>
             <strong>GILGAMESH</strong>
-            <span>Lane Screening</span>
+            <span>Terminal 3 · Lane 04 · Carry-on</span>
           </div>
+        </div>
+        <div className="view-switch" role="group" aria-label="Screen">
+          <button type="button" className={screen === "lane" ? "on" : ""} onClick={() => setScreen("lane")}>
+            Lane
+          </button>
+          <button type="button" className={screen === "console" ? "on" : ""} onClick={() => setScreen("console")}>
+            Console
+          </button>
         </div>
         <div className="station">
           <span>Terminal 3</span>
@@ -410,32 +521,34 @@ export function App() {
           <span>Carry-on</span>
         </div>
         <div className="top-stats">
+          <button type="button" className="ghost history-btn" onClick={() => setShowHistory(true)}>
+            History
+          </button>
           <span className="live">
             <i /> Live
           </span>
-          <span className="stat">
-            Cleared <b>{cleared}</b>
-          </span>
-          <span className="stat held">
-            Held <b>{held}</b>
-          </span>
+          {screen === "console" && (
+            <>
+              <span className="stat">
+                Cleared <b>{cleared}</b>
+              </span>
+              <span className="stat held">
+                Held <b>{held}</b>
+              </span>
+            </>
+          )}
           <time dateTime={now.toISOString()}>{formatClock(now)}</time>
         </div>
       </header>
 
+      {screen === "lane" ? (
+        <LaneView />
+      ) : (
       <div className="workspace">
         <aside className="rail queue">
           <div className="rail-head">
             <h2>Queue</h2>
-            <span>{done ? "Done" : `${index + 1} of ${Math.max(entries.length, 1)}`}</span>
-          </div>
-          <div className="lane-modes" role="group" aria-label="Lane source">
-            <button type="button" className={mode === "demo" ? "on" : ""} onClick={() => switchMode("demo")}>
-              Demo
-            </button>
-            <button type="button" className={mode === "real" ? "on" : ""} onClick={() => switchMode("real")}>
-              Real{realEntries.length ? ` · ${realEntries.length}` : ""}
-            </button>
+            <span>{entries.length === 0 ? "Empty" : done ? "Done" : `${index + 1} of ${entries.length}`}</span>
           </div>
           <ol className="bag-list">
             {entries.map((laneEntry, entryIndex) => {
@@ -509,9 +622,20 @@ export function App() {
                   Drop PNG or JPG bag scans anywhere on the console, or choose files. Images stay on this laptop and
                   the model runs in the browser.
                 </p>
-                <button type="button" className="primary safe" onClick={() => fileInput.current?.click()}>
-                  Choose images
-                </button>
+                <div className="empty-actions">
+                  {samples.length > 0 && (
+                    <button type="button" className="primary safe" data-testid="try-samples" onClick={() => void loadSamples()}>
+                      Try {samples.length} sample scans
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={samples.length > 0 ? "ghost" : "primary safe"}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    Choose images
+                  </button>
+                </div>
                 <ModelStatus state={modelState} onRetry={warmModel} />
               </div>
             ) : (
@@ -563,7 +687,7 @@ export function App() {
               </div>
 
               <div className={`views ${stateClass} ${isReal ? "single" : ""}`}>
-                {ready && analysis.verdict === "clear" && <div className="stamp clear">Safe to proceed</div>}
+                {ready && analysis.verdict === "clear" && <div className="stamp clear">No threats found</div>}
                 <XrayPane
                   source={entry}
                   view="top"
@@ -594,9 +718,11 @@ export function App() {
                 <strong>{verdictText}</strong>
                 {ready && (
                   <span>
+                    {analysis.verdict === "clear" ? "Officer confirms before clearing · " : ""}
                     {analysis.detections.length} object{analysis.detections.length === 1 ? "" : "s"} ·{" "}
                     {analysis.threatCount} threat
                     {analysis.threatCount === 1 ? "" : "s"}
+                    {analysis.verdict === "review" ? " · weak hits shown in orange" : ""}
                   </span>
                 )}
               </div>
@@ -610,6 +736,12 @@ export function App() {
             <h2>Findings</h2>
             {ready && <span>{formatElapsed(analysis.elapsedMs)}</span>}
           </div>
+
+          {passenger && (
+            <div className="passenger-slot">
+              <PassengerCard record={passenger} compact />
+            </div>
+          )}
 
           {!entry ? (
             <p className="muted pad">
@@ -676,7 +808,7 @@ export function App() {
                     <li key={detection.itemId}>
                       <button
                         type="button"
-                        className={`${detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                        className={`${detection.uncertain ? "uncertain" : detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
                         onMouseEnter={() => setHoveredId(detection.itemId)}
                         onMouseLeave={() => setHoveredId(null)}
                         onClick={() => inspect(detection.itemId)}
@@ -687,7 +819,7 @@ export function App() {
                         </span>
                         <span className="det-sub">
                           {materialText(detection.material, isReal)}
-                          {detection.threat ? " · threat" : ""}
+                          {detection.uncertain ? " · possible threat, below alarm" : detection.threat ? " · threat" : ""}
                         </span>
                         <span className="meter" aria-hidden="true">
                           <span style={{ width: `${detection.confidence * 100}%` }} />
@@ -716,9 +848,13 @@ export function App() {
           </div>
 
           <div className="actions">
-            {confirmClear && analysis?.verdict === "threat" ? (
+            {confirmClear && analysis && analysis.verdict !== "clear" ? (
               <div className="confirm">
-                <p>This bag has a flagged threat. Clearing it overrides the model and sends it down the lane.</p>
+                <p>
+                  {analysis.verdict === "threat"
+                    ? "This bag has a flagged threat. Clearing it overrides the model and sends it down the lane."
+                    : "The model saw a possible threat it wasn't sure about. Clear only if you checked that spot."}
+                </p>
                 <div className="action-row">
                     <button type="button" className="ghost" onClick={() => setConfirmClear(false)}>
                     Keep Holding
@@ -734,7 +870,7 @@ export function App() {
                     <button type="button" className="primary danger" onClick={() => decide("held")}>
                     Hold for Search
                   </button>
-                ) : analysis?.verdict === "threat" ? (
+                ) : analysis && analysis.verdict !== "clear" ? (
                   <>
                     <button type="button" className="primary danger" disabled={!ready} onClick={() => decide("held")}>
                       Hold for Search
@@ -752,7 +888,7 @@ export function App() {
                       disabled={!entry || !ready}
                       onClick={requestClear}
                     >
-                      Safe to Proceed
+                      Clear Bag
                     </button>
                     <button type="button" className="ghost" disabled={!entry || !ready} onClick={() => decide("held")}>
                       Hold for Search
@@ -762,8 +898,15 @@ export function App() {
               </div>
             )}
             {mode === "real" ? (
-              <button type="button" className="open3d" disabled title="A 2D X-ray has no depth to render. 3D needs a CT scan.">
-                3D Needs a CT Scan
+              <button
+                type="button"
+                className="open3d"
+                data-testid="open-density"
+                disabled={!entry || !ready || !analysis}
+                title="Density visualization, not a CT scan"
+                onClick={() => setShow3d(true)}
+              >
+                Open Density View
               </button>
             ) : (
               <button
@@ -803,14 +946,14 @@ export function App() {
                   <li key={detection.itemId}>
                     <button
                       type="button"
-                      className={`${detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                      className={`${detection.uncertain ? "uncertain" : detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
                       onClick={() => setFocusId(detection.itemId)}
                     >
                       <span className="det-top">
                         <b>{detection.label}</b>
                         <em>{detection.confidence.toFixed(3)}</em>
                       </span>
-                      <span className="det-sub">{detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
+                      <span className="det-sub">{detection.uncertain ? "Possible threat · click to frame" : detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
                     </button>
                   </li>
                 ))}
@@ -818,7 +961,60 @@ export function App() {
               <div className="actions">
                 {analysis.verdict === "clear" ? (
                   <button type="button" className="primary safe" onClick={() => decide("cleared")}>
-                    Safe to Proceed
+                    Clear Bag
+                  </button>
+                ) : (
+                  <button type="button" className="primary danger" onClick={() => decide("held")}>
+                    Hold for Search
+                  </button>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {show3d && entry?.kind === "real" && analysis && (
+          <div className="inspector" role="dialog" aria-label="3D density view">
+            <DensityView
+              key={entry.scan.id}
+              scan={entry.scan}
+              detections={analysis.detections}
+              focusId={focusId}
+              onSelect={setFocusId}
+            />
+            <aside className="inspect-side">
+              <div className="rail-head">
+                <h2>Density View</h2>
+                <button type="button" className="texty" onClick={() => setShow3d(false)}>
+                  Done
+                </button>
+              </div>
+              <p className="muted">
+                {entry.scan.fileName}. Darker, denser material rises higher. Layers splits organic, mixed, and metal by
+                color. This is a density visualization of one 2D X-ray, not a CT scan.
+              </p>
+              <ul className="detections">
+                {analysis.detections.map((detection) => (
+                  <li key={detection.itemId}>
+                    <button
+                      type="button"
+                      className={`${detection.uncertain ? "uncertain" : detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                      onClick={() => setFocusId(detection.itemId)}
+                    >
+                      <span className="det-top">
+                        <b>{detection.label}</b>
+                        <em>{detection.confidence.toFixed(3)}</em>
+                      </span>
+                      <span className="det-sub">{detection.uncertain ? "Possible threat · click to frame" : detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
+                    </button>
+                  </li>
+                ))}
+                {analysis.detections.length === 0 && <li className="muted">No detections above threshold.</li>}
+              </ul>
+              <div className="actions">
+                {analysis.verdict === "clear" ? (
+                  <button type="button" className="primary safe" onClick={() => decide("cleared")}>
+                    Clear Bag
                   </button>
                 ) : (
                   <button type="button" className="primary danger" onClick={() => decide("held")}>
@@ -838,15 +1034,20 @@ export function App() {
             </div>
           </div>
         )}
+
+        <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
       </div>
+      )}
 
       <footer className="bottombar">
         <span>{modelLine}</span>
         <span className="keys">
-          {show3d
+          {screen === "lane"
+            ? "Drag to orbit · click a held bag's blue node for its 3D view · drop images to add them to the belt"
+            : show3d
             ? "Esc back to 2D · drag to orbit"
             : mode === "real"
-              ? "Drop images to add · click a box to select · H hold · C clear"
+              ? "Drop images to add · click a box to select · H hold · C clear · 3 density view"
               : "Click a box or the bag for 3D · H hold · C clear · 3 open 3D"}
         </span>
       </footer>
@@ -889,5 +1090,5 @@ function phaseLabel(phase: Phase) {
   if (phase === "entering") return "Entering";
   if (phase === "scanning") return "Scanning";
   if (phase === "failed") return "Not screened";
-  return "Review";
+  return "On screen";
 }

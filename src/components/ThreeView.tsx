@@ -5,7 +5,7 @@ import { mountScene, type SceneApi } from "../lib/threeScene";
 interface ThreeViewProps {
   bag: Bag;
   focusId: string | null;
-  verdict: "clear" | "threat";
+  verdict: "clear" | "review" | "threat";
   onSelect: (id: string | null) => void;
 }
 
@@ -42,7 +42,7 @@ export function ThreeView({ bag, focusId, verdict, onSelect }: ThreeViewProps) {
     <div className="three-wrap">
       <div ref={hostRef} className="three-host" data-testid="three-view" />
       <div className={`three-badge ${verdict}`}>
-        {verdict === "clear" ? "Safe to proceed" : "Threat in volume"}
+        {verdict === "clear" ? "No threats found" : "Threat in volume"}
       </div>
       <div className="three-hud">
         <p>Drag to rotate · scroll to zoom</p>
