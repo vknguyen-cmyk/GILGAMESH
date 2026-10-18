@@ -1,5 +1,5 @@
 import type { InferenceSession } from "onnxruntime-web";
-import { decodeYolo, letterbox, rgbaToChw, type RawDetection, type YoloFormat } from "./yolo";
+import { decodeYolo, fitImage, rgbaToChw, type RawDetection, type ResizeMode, type YoloFormat } from "./yolo";
 
 /**
  * In-browser threat detector.
@@ -19,6 +19,8 @@ export interface ModelConfig {
   /** Labels that put a bag on hold. Matching ignores case. */
   threats: string[];
   format?: YoloFormat;
+  /** How images were fitted to the square during training. Roboflow's "Stretch to" means "stretch". */
+  resize?: ResizeMode;
   /** Starting value for the alarm threshold slider. */
   defaultThreshold?: number;
   iou?: number;
@@ -92,6 +94,7 @@ async function fetchConfig(): Promise<ModelConfig> {
     labels: config.labels,
     threats: config.threats ?? [],
     format: config.format,
+    resize: config.resize === "stretch" ? "stretch" : "letterbox",
     defaultThreshold: config.defaultThreshold ?? 0.35,
     iou: config.iou ?? 0.45,
   };
@@ -147,7 +150,7 @@ async function runDetect(image: CanvasImageSource & { width: number; height: num
   const started = performance.now();
 
   const size = config.inputSize;
-  const box = letterbox(image.width, image.height, size);
+  const box = fitImage(image.width, image.height, size, config.resize);
   const canvas = makeCanvas(size);
   const ctx = canvas.getContext("2d", { willReadFrequently: true }) as
     | CanvasRenderingContext2D

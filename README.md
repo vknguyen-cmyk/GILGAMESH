@@ -68,7 +68,19 @@ If no model is loaded, an image is marked **Not screened** and can only be held.
 
 - `labels` must list every class in training order.
 - `threats` decides which boxes are red and put a bag on hold. Matching ignores case.
-- `format` is `yolov8` for YOLOv8 and YOLO11 exports, `yolov5` for YOLOv5, or `end2end` for NMS-free exports such as YOLO26. If it's missing, the console works it out from the output shape.
+- `format` is `yolov8` for YOLOv8, YOLO11, and most YOLO26 exports, `yolov5` for YOLOv5, or `end2end` for NMS-free exports. If it's missing, the console works it out from the output shape.
+- `resize` is `letterbox` (default, what Ultralytics and the notebook use) or `stretch`. Use `stretch` for models trained on Roboflow with "Resize: Stretch to", so images are prepared the same way at screening time.
+
+### Using a model trained on Roboflow
+
+Roboflow's **Download Weights** gives a PyTorch `.pt` file. Convert it to ONNX once:
+
+```bash
+pip install ultralytics onnx onnxslim
+yolo export model=weights.pt format=onnx imgsz=640 simplify=True
+```
+
+Copy the resulting `weights.onnx` to `public/models/xray/model.onnx`, then set `"resize": "stretch"` and the class names from Roboflow's **Classes & Tags** in `model.json`.
 
 ## What's real and what isn't
 

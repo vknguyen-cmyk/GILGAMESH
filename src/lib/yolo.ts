@@ -1,5 +1,5 @@
 /**
- * Pure YOLO helpers: letterbox math, output decoding, and NMS.
+ * Pure YOLO helpers: resize math, output decoding, and NMS.
  * No DOM or onnxruntime here, so the same code runs in the browser and in Node tests.
  */
 
@@ -12,11 +12,19 @@ export type YoloFormat =
   /** NMS-free end-to-end export (YOLOv10, YOLO26): [1, maxDet, 6] = x1, y1, x2, y2, score, class. */
   | "end2end";
 
+/** How an image is fitted into the square model input. */
+export type ResizeMode =
+  /** Keep the aspect ratio and pad with gray (Ultralytics default). */
+  | "letterbox"
+  /** Squash to the full square (Roboflow's "Stretch to" preprocessing). */
+  | "stretch";
+
 export interface Letterbox {
   /** Square model input size in pixels. */
   size: number;
-  /** Scale from source pixels to model pixels. */
-  scale: number;
+  /** Scale from source pixels to model pixels, per axis. Equal for letterbox. */
+  scaleX: number;
+  scaleY: number;
   /** Left and top padding in model pixels. */
   padX: number;
   padY: number;
@@ -34,7 +42,17 @@ export function letterbox(srcW: number, srcH: number, size: number): Letterbox {
   const newH = Math.round(srcH * scale);
   const padX = Math.max(0, Math.round((size - newW) / 2 - 0.1));
   const padY = Math.max(0, Math.round((size - newH) / 2 - 0.1));
-  return { size, scale, padX, padY, newW, newH, srcW, srcH };
+  return { size, scaleX: scale, scaleY: scale, padX, padY, newW, newH, srcW, srcH };
+}
+
+/** Stretch the whole image to the square, the way Roboflow's "Stretch to" resize trains. */
+export function stretch(srcW: number, srcH: number, size: number): Letterbox {
+  return { size, scaleX: size / srcW, scaleY: size / srcH, padX: 0, padY: 0, newW: size, newH: size, srcW, srcH };
+}
+
+/** Pick the fitting rule a model was trained with. */
+export function fitImage(srcW: number, srcH: number, size: number, mode: ResizeMode = "letterbox"): Letterbox {
+  return mode === "stretch" ? stretch(srcW, srcH, size) : letterbox(srcW, srcH, size);
 }
 
 /** One detection with its box normalized to the source image (0–1). */
@@ -202,10 +220,10 @@ export function decodeYolo(
 
   const out: RawDetection[] = [];
   for (const candidate of kept) {
-    const x1 = clamp((candidate.x1 - box.padX) / box.scale, 0, box.srcW);
-    const y1 = clamp((candidate.y1 - box.padY) / box.scale, 0, box.srcH);
-    const x2 = clamp((candidate.x2 - box.padX) / box.scale, 0, box.srcW);
-    const y2 = clamp((candidate.y2 - box.padY) / box.scale, 0, box.srcH);
+    const x1 = clamp((candidate.x1 - box.padX) / box.scaleX, 0, box.srcW);
+    const y1 = clamp((candidate.y1 - box.padY) / box.scaleY, 0, box.srcH);
+    const x2 = clamp((candidate.x2 - box.padX) / box.scaleX, 0, box.srcW);
+    const y2 = clamp((candidate.y2 - box.padY) / box.scaleY, 0, box.srcH);
     if (x2 - x1 < 1 || y2 - y1 < 1) continue;
     out.push({
       classId: candidate.classId,
