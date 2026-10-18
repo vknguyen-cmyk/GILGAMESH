@@ -3,7 +3,9 @@
 Carry-on X-ray screening console for a hackathon demo. Light Apple-style UI with SF system fonts. It has two lanes:
 
 - **Demo lane:** scripted bags slide into a dual-view 2D scan. Threats are boxed in red with a confidence score, a clear bag is marked green as **Safe to proceed**, and any bag opens as a 3D render.
-- **Real X-rays:** drop real baggage X-ray images onto the console. A YOLO model runs in the browser on this laptop, boxes what it finds, and gives the same verdict. No server, no API key, no Wi-Fi needed at the booth.
+- **Real X-rays:** drop real baggage X-ray images onto the console. A YOLO model runs in the browser on this laptop, boxes what it finds, and gives the same verdict.
+
+A thin history API stores each bag’s passenger (anonymous photo, name, ID), flight ticket, and a 2D scan image so you can reopen past cases.
 
 ## Run
 
@@ -12,7 +14,7 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL. Production build:
+That starts both the Vite UI (`:5173`) and the history API (`:3001`). Open the printed local URL. Production build:
 
 ```bash
 npm run build
@@ -35,6 +37,20 @@ Bundled samples come from public research datasets (SIXray, OPIXray) and are for
 4. Later bags include a knife and a firearm component. **Override clear** asks before an officer sends a threat down the lane.
 
 Keys: `H` hold, `C` clear, `3` open 3D, `Esc` back to the X-ray.
+
+Open **History** in the top bar to browse stored passenger cards, flights, and 2D scans. Clearing or holding a demo bag writes the decision to the API.
+
+## History API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/records` | List luggage history |
+| `GET` | `/api/records/by-bag/:bagId` | Passenger record for a bag |
+| `PATCH` | `/api/records/by-bag/:bagId/decision` | Save cleared / held |
+| `POST` | `/api/records` | Create a record |
+| `POST` | `/api/records/reset` | Restore demo seed data |
+
+Photos are anonymous placeholders. Seed data lives in `server/seed.js`; runtime writes go to `server/data/records.json`.
 
 ## Screen real X-ray images
 
@@ -103,6 +119,7 @@ yolo export model=best.pt format=onnx imgsz=640 simplify=True opset=17
 ## What's real and what isn't
 
 - **Demo lane:** imagery and scores are scripted so the booth run is repeatable. `src/lib/analyze.ts` returns them.
+- **History:** passenger photos are anonymous placeholders, not real faces. Flight and ID fields are demo data.
 - **Real lane:** boxes, labels, and confidence come from the model (`src/lib/detector.ts`, decoding in `src/lib/yolo.ts`). Accuracy depends entirely on the training data; expect it to drop on scanners the model never saw.
 - **Material** on real scans is an estimate from the pseudo-color inside each box: orange is organic, green is mixed, blue is metal. Grayscale scans show "material n/a", and the Organic and Metal filters turn off for them.
 - **3D:** the demo lane renders its scripted bags in 3D. Real scans get a density view instead: darker, denser pixels rise higher. A single 2D X-ray has no depth to reconstruct, so this is a visualization, not a CT scan.

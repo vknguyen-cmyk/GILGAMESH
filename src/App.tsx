@@ -9,6 +9,10 @@ import { ThreeView } from "./components/ThreeView";
 import { DensityView } from "./components/DensityView";
 import { LaneView } from "./components/LaneView";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
+import { HistorySheet } from "./components/HistorySheet";
+import { PassengerCard } from "./components/PassengerCard";
+import { createRecord, fetchRecordByBag, saveDecisionByBag } from "./lib/historyApi";
+import type { PassengerRecord } from "./types/history";
 
 type Mode = "demo" | "real";
 
@@ -85,6 +89,9 @@ export function App() {
   const [threshold, setThreshold] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyTick, setHistoryTick] = useState(0);
+  const [passenger, setPassenger] = useState<PassengerRecord | null>(null);
   const lock = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
@@ -130,6 +137,24 @@ export function App() {
   useEffect(() => {
     if (mode === "real" && modelState.status === "idle") warmModel();
   }, [mode, modelState.status]);
+
+  useEffect(() => {
+    if (!entry || entry.kind !== "sim") {
+      setPassenger(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRecordByBag(entry.bag.id)
+      .then((record) => {
+        if (!cancelled) setPassenger(record);
+      })
+      .catch(() => {
+        if (!cancelled) setPassenger(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentKey, mode]);
 
   useEffect(() => {
     lock.current = false;
@@ -228,6 +253,10 @@ export function App() {
           setConfirmClear(false);
           return;
         }
+        if (showHistory) {
+          setShowHistory(false);
+          return;
+        }
         if (show3d) setShow3d(false);
         else if (focusId) setFocusId(null);
         return;
@@ -274,13 +303,15 @@ export function App() {
     if (phase === "failed" && action === "cleared") return;
     lock.current = true;
     const meta = entryMeta(entry);
+    const verdict = phase === "ready" && analysis ? analysis.verdict : "unscreened";
+    const top = analysis?.detections.find((item) => item.threat) ?? null;
     setDecisionsByMode((current) => ({
       ...current,
       [mode]: [
         {
           bagId: meta.id,
           action,
-          verdict: phase === "ready" && analysis ? analysis.verdict : "unscreened",
+          verdict,
           at: Date.now(),
         },
         ...current[mode],
@@ -288,6 +319,48 @@ export function App() {
     }));
     setConfirmClear(false);
     setShow3d(false);
+
+    if (entry.kind === "sim") {
+      void saveDecisionByBag(entry.bag.id, {
+        action,
+        verdict,
+        threatLabel: top?.label ?? null,
+        confidence: top?.confidence ?? null,
+      })
+        .then(() => setHistoryTick((value) => value + 1))
+        .catch(() => undefined);
+    } else {
+      void createRecord({
+        bagId: meta.id,
+        passenger: {
+          name: "Anonymous traveler",
+          idNumber: `TMP-${meta.id}`,
+          photoUrl: "/history/avatars/anonymous.svg",
+        },
+        flight: {
+          number: "TBD",
+          from: "—",
+          to: "—",
+          date: new Date().toISOString().slice(0, 10),
+        },
+        scan: {
+          imageUrl: "/history/scans/placeholder.svg",
+          view: "single",
+          caption: meta.detail,
+          dataUrl: null,
+        },
+        screening: {
+          verdict,
+          action,
+          threatLabel: top?.label ?? null,
+          confidence: top?.confidence ?? null,
+          screenedAt: new Date().toISOString(),
+        },
+      })
+        .then(() => setHistoryTick((value) => value + 1))
+        .catch(() => undefined);
+    }
+
     setIndex((current) => current + 1);
   }
 
@@ -455,6 +528,9 @@ export function App() {
           <span>Carry-on</span>
         </div>
         <div className="top-stats">
+          <button type="button" className="ghost history-btn" onClick={() => setShowHistory(true)}>
+            History
+          </button>
           <span className="live">
             <i /> Live
           </span>
@@ -680,6 +756,12 @@ export function App() {
             <h2>Findings</h2>
             {ready && <span>{formatElapsed(analysis.elapsedMs)}</span>}
           </div>
+
+          {passenger && (
+            <div className="passenger-slot">
+              <PassengerCard record={passenger} compact />
+            </div>
+          )}
 
           {!entry ? (
             <p className="muted pad">
@@ -972,6 +1054,8 @@ export function App() {
             </div>
           </div>
         )}
+
+        <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
       </div>
       )}
 
