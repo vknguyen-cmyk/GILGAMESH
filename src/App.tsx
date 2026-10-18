@@ -363,7 +363,7 @@ export function App() {
   if (ready && analysis.verdict === "clear") verdictText = "Safe to proceed";
   if (ready && analysis.verdict === "threat") {
     verdictText = topThreat
-      ? `Threat detected · ${topThreat.label} ${topThreat.confidence.toFixed(3)}`
+      ? `Threat · ${topThreat.label} ${topThreat.confidence.toFixed(3)}`
       : "Threat detected";
   }
   const stateClass = ready ? analysis.verdict : phase;
@@ -399,7 +399,7 @@ export function App() {
           </span>
           <div>
             <strong>GILGAMESH</strong>
-            <span>Lane screening</span>
+            <span>Lane Screening</span>
           </div>
         </div>
         <div className="station">
@@ -426,15 +426,15 @@ export function App() {
       <div className="workspace">
         <aside className="rail queue">
           <div className="rail-head">
-            <h2>Lane queue</h2>
-            <span>{done ? `${entries.length} / ${entries.length}` : `${index + 1} / ${entries.length}`}</span>
+            <h2>Queue</h2>
+            <span>{done ? "Done" : `${index + 1} of ${Math.max(entries.length, 1)}`}</span>
           </div>
           <div className="lane-modes" role="group" aria-label="Lane source">
             <button type="button" className={mode === "demo" ? "on" : ""} onClick={() => switchMode("demo")}>
-              Demo lane
+              Demo
             </button>
             <button type="button" className={mode === "real" ? "on" : ""} onClick={() => switchMode("real")}>
-              Real X-rays{realEntries.length ? ` · ${realEntries.length}` : ""}
+              Real{realEntries.length ? ` · ${realEntries.length}` : ""}
             </button>
           </div>
           <ol className="bag-list">
@@ -485,7 +485,7 @@ export function App() {
               }}
             />
             <button type="button" className="ghost upload" onClick={() => fileInput.current?.click()}>
-              Add X-ray images
+              Add X-ray Images
             </button>
             {uploadNote && <p className="note">{uploadNote}</p>}
             <button
@@ -494,7 +494,7 @@ export function App() {
               onClick={restart}
               disabled={entries.length === 0 || (index === 0 && decisions.length === 0)}
             >
-              Restart lane
+              Restart Lane
             </button>
           </div>
         </aside>
@@ -607,7 +607,7 @@ export function App() {
 
         <aside className="rail assess">
           <div className="rail-head">
-            <h2>Assessment</h2>
+            <h2>Findings</h2>
             {ready && <span>{formatElapsed(analysis.elapsedMs)}</span>}
           </div>
 
@@ -720,34 +720,31 @@ export function App() {
               <div className="confirm">
                 <p>This bag has a flagged threat. Clearing it overrides the model and sends it down the lane.</p>
                 <div className="action-row">
-                  <button type="button" className="ghost" onClick={() => setConfirmClear(false)}>
-                    Keep on hold
+                    <button type="button" className="ghost" onClick={() => setConfirmClear(false)}>
+                    Keep Holding
                   </button>
                   <button type="button" className="primary danger" onClick={() => decide("cleared")}>
-                    Override and clear
+                    Override and Clear
                   </button>
                 </div>
               </div>
             ) : (
               <div className="action-row">
                 {phase === "failed" ? (
-                  <button type="button" className="primary danger" onClick={() => decide("held")}>
-                    Hold for search
+                    <button type="button" className="primary danger" onClick={() => decide("held")}>
+                    Hold for Search
                   </button>
                 ) : analysis?.verdict === "threat" ? (
                   <>
                     <button type="button" className="primary danger" disabled={!ready} onClick={() => decide("held")}>
-                      Hold for search
+                      Hold for Search
                     </button>
                     <button type="button" className="ghost" disabled={!ready} onClick={requestClear}>
-                      Override clear
+                      Override Clear
                     </button>
                   </>
                 ) : (
                   <>
-                    <button type="button" className="ghost" disabled={!entry || !ready} onClick={() => decide("held")}>
-                      Hold for search
-                    </button>
                     <button
                       type="button"
                       className="primary safe"
@@ -755,7 +752,10 @@ export function App() {
                       disabled={!entry || !ready}
                       onClick={requestClear}
                     >
-                      Safe to proceed
+                      Safe to Proceed
+                    </button>
+                    <button type="button" className="ghost" disabled={!entry || !ready} onClick={() => decide("held")}>
+                      Hold for Search
                     </button>
                   </>
                 )}
@@ -763,7 +763,7 @@ export function App() {
             )}
             {mode === "real" ? (
               <button type="button" className="open3d" disabled title="A 2D X-ray has no depth to render. 3D needs a CT scan.">
-                3D needs a CT scan
+                3D Needs a CT Scan
               </button>
             ) : (
               <button
@@ -773,7 +773,7 @@ export function App() {
                 disabled={!entry || !ready}
                 onClick={() => inspect(hoveredId)}
               >
-                Open 3D render
+                View in 3D
               </button>
             )}
           </div>
@@ -790,14 +790,13 @@ export function App() {
             />
             <aside className="inspect-side">
               <div className="rail-head">
-                <h2>3D render</h2>
+                <h2>3D View</h2>
                 <button type="button" className="texty" onClick={() => setShow3d(false)}>
-                  Back to 2D
+                  Done
                 </button>
               </div>
               <p className="muted">
-                {entry.bag.id} · {TYPE_LABEL[entry.bag.type]}. Wire boxes mark the same objects as the X-ray. Red is a
-                threat.
+                {entry.bag.id} · {TYPE_LABEL[entry.bag.type]}. Red marks a threat. Click an item to frame it.
               </p>
               <ul className="detections">
                 {analysis.detections.map((detection) => (
@@ -819,11 +818,11 @@ export function App() {
               <div className="actions">
                 {analysis.verdict === "clear" ? (
                   <button type="button" className="primary safe" onClick={() => decide("cleared")}>
-                    Safe to proceed
+                    Safe to Proceed
                   </button>
                 ) : (
                   <button type="button" className="primary danger" onClick={() => decide("held")}>
-                    Hold for search
+                    Hold for Search
                   </button>
                 )}
               </div>

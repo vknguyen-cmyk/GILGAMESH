@@ -45,9 +45,9 @@ export function ThreeView({ bag, focusId, verdict, onSelect }: ThreeViewProps) {
         {verdict === "clear" ? "Safe to proceed" : "Threat in volume"}
       </div>
       <div className="three-hud">
-        <p>Drag to rotate · scroll to zoom · click an object</p>
+        <p>Drag to rotate · scroll to zoom</p>
         <label className="slice">
-          <span>Height clip {slice}%</span>
+          <span>Clip {slice}%</span>
           <input
             type="range"
             min={12}
@@ -65,7 +65,7 @@ export function ThreeView({ bag, focusId, verdict, onSelect }: ThreeViewProps) {
             apiRef.current?.setFocus(null);
           }}
         >
-          Frame bag
+          Reset View
         </button>
       </div>
     </div>

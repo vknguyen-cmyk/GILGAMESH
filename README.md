@@ -1,6 +1,6 @@
 # GILGAMESH
 
-Carry-on X-ray screening console for a hackathon demo. It has two lanes:
+Carry-on X-ray screening console for a hackathon demo. Light Apple-style UI with SF system fonts. It has two lanes:
 
 - **Demo lane:** scripted bags slide into a dual-view 2D scan. Threats are boxed in red with a confidence score, a clear bag is marked green as **Safe to proceed**, and any bag opens as a 3D render.
 - **Real X-rays:** drop real baggage X-ray images onto the console. A YOLO model runs in the browser on this laptop, boxes what it finds, and gives the same verdict. No server, no API key, no Wi-Fi needed at the booth.

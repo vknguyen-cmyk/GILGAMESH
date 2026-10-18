@@ -19,8 +19,8 @@ interface XrayPaneProps {
 }
 
 const VIEW_LABEL: Record<ViewKind, string> = {
-  top: "View A · Top",
-  side: "View B · Side",
+  top: "Top View",
+  side: "Side View",
 };
 
 const FULL: Rect = { x: 0, y: 0, w: 1, h: 1 };
@@ -91,8 +91,8 @@ export function XrayPane({
     return { detection, projected };
   });
 
-  const tag = source.kind === "real" ? `View A · ${source.scan.fileName}` : VIEW_LABEL[view];
-  const action = source.kind === "real" ? "Select" : "Open 3D render of";
+  const tag = source.kind === "real" ? source.scan.fileName : VIEW_LABEL[view];
+  const action = source.kind === "real" ? "Select" : "Open 3D view of";
 
   return (
     <section className="pane" aria-label={tag}>

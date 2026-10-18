@@ -262,7 +262,7 @@ export function mountScene(
 ): SceneApi {
   const [W, H, D] = DIMS[bag.type];
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf3f0e8);
+  scene.background = new THREE.Color(0xf5f5f7);
 
   const camera = new THREE.PerspectiveCamera(34, 1, 0.05, 40);
   const radius = Math.max(W, H, D);
@@ -293,11 +293,11 @@ export function mountScene(
   controls.maxPolarAngle = Math.PI * 0.49;
   controls.update();
 
-  scene.add(new THREE.HemisphereLight(0xfff6ec, 0xc9b59a, 1.15));
-  const key = new THREE.DirectionalLight(0xffffff, 1.55);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xd8d8de, 1.05));
+  const key = new THREE.DirectionalLight(0xffffff, 1.35);
   key.position.set(3, 4, 2);
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xc9d6ff, 0.55);
+  const fill = new THREE.DirectionalLight(0xe8eef8, 0.45);
   fill.position.set(-3, 1.5, -2);
   scene.add(fill);
 
