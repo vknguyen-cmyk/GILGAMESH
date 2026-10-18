@@ -145,7 +145,8 @@ export function buildRealAnalysis(
     })
     .sort(
       (a, b) =>
-        Number(!a.uncertain) - Number(!b.uncertain) ||
+        // Confident detections first, then threats, then by score.
+        Number(!b.uncertain) - Number(!a.uncertain) ||
         Number(b.threat) - Number(a.threat) ||
         b.confidence - a.confidence,
     );

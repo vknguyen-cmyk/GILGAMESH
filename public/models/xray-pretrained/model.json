@@ -1,0 +1,23 @@
+{
+  "name": "X-ray baggage v1 · YOLOv8s",
+  "file": "model.onnx",
+  "inputSize": 640,
+  "labels": ["Scissors", "Knife", "Knife", "Knife", "Knife"],
+  "threats": ["Scissors", "Knife"],
+  "format": "yolov8",
+  "resize": "stretch",
+  "defaultThreshold": 0.35,
+  "iou": 0.45,
+  "metrics": {
+    "mAP50": 0.902,
+    "precision": 0.894,
+    "recall": 0.849,
+    "split": "test set, 883 images, as reported in the source notebook"
+  },
+  "source": {
+    "weights": "https://github.com/tulsiprasadmohanty/Xray-luggage-and-suitcase-object-detection-system- (model/best.pt, MIT)",
+    "dataset": "X-ray baggage detection v1 by Malek, Roboflow Universe, CC BY 4.0: https://universe.roboflow.com/malek-mhnrl/x-ray-baggage-detection/dataset/1",
+    "trainedAt": 480,
+    "note": "Class names are numeric (0-4) in the dataset; mapped the same way as the primary model, which uses the same dataset."
+  }
+}

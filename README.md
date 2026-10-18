@@ -82,12 +82,22 @@ yolo export model=weights.pt format=onnx imgsz=640 simplify=True
 
 Copy the resulting `weights.onnx` to `public/models/xray/model.onnx`, then set `"resize": "stretch"` and the class names from Roboflow's **Classes & Tags** in `model.json`.
 
+### A second model (optional)
+
+If `public/models/xray-pretrained/` holds a `model.json` and `model.onnx`, the console runs both models on every scan, in parallel, and merges their boxes with cross-model Weighted Boxes Fusion (`mergeModelDetections` in `src/lib/yolo.ts`): overlapping boxes (IoU ≥ 0.45) are averaged by confidence, and the higher score and label are kept so agreement never inflates a score. A label is a threat if either model lists it. Remove the folder to go back to one model.
+
+The bundled second model is the YOLOv8s from [tulsiprasadmohanty/Xray-luggage-and-suitcase-object-detection-system-](https://github.com/tulsiprasadmohanty/Xray-luggage-and-suitcase-object-detection-system-) (`model/best.pt`, MIT), trained at 480px on [X-ray baggage detection v1](https://universe.roboflow.com/malek-mhnrl/x-ray-baggage-detection/dataset/1) by Malek (CC BY 4.0), exported to ONNX at 640px:
+
+```bash
+yolo export model=best.pt format=onnx imgsz=640 simplify=True opset=17
+```
+
 ## What's real and what isn't
 
 - **Demo lane:** imagery and scores are scripted so the booth run is repeatable. `src/lib/analyze.ts` returns them.
 - **Real lane:** boxes, labels, and confidence come from the model (`src/lib/detector.ts`, decoding in `src/lib/yolo.ts`). Accuracy depends entirely on the training data; expect it to drop on scanners the model never saw.
 - **Material** on real scans is an estimate from the pseudo-color inside each box: orange is organic, green is mixed, blue is metal. Grayscale scans show "material n/a", and the Organic and Metal filters turn off for them.
-- **3D** is only for the demo lane. A single 2D X-ray has no depth to reconstruct; that needs a CT scan.
+- **3D:** the demo lane renders its scripted bags in 3D. Real scans get a density view instead: darker, denser pixels rise higher. A single 2D X-ray has no depth to reconstruct, so this is a visualization, not a CT scan.
 - **One view:** real images are screened as a single view. Dual-view fusion is a next step.
 - This is a prototype. An officer makes the final call.
 
