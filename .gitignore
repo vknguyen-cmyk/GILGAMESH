@@ -4,5 +4,4 @@ dist
 *.local
 .vite
 *.zip
-server/data/records.json
-server/data/records.json.tmp
+server/data/

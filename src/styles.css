@@ -1214,3 +1214,17 @@ input[type="range"] { accent-color: var(--blue); }
   .lane-stage { min-height: 420px; }
   .lane-inspect-card { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(240px, 1fr) auto; height: 100%; }
 }
+
+/* History: the stored scan fits its card instead of filling the page */
+.passenger-scan img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  background: #f4f1ea;
+  border-radius: 12px;
+}
+.passenger-photo, .history-rows img { background: var(--fill); }
+/* History opens over either screen, between the top bar and the footer */
+.app { position: relative; }
+.app > .history-sheet { inset: 60px 0 38px; }

@@ -11,7 +11,7 @@ import { LaneView } from "./components/LaneView";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 import { HistorySheet } from "./components/HistorySheet";
 import { PassengerCard } from "./components/PassengerCard";
-import { createRecord, fetchRecordByBag, saveDecisionByBag } from "./lib/historyApi";
+import { saveBag, scanToJpeg } from "./lib/historyApi";
 import type { PassengerRecord } from "./types/history";
 
 type Mode = "demo" | "real";
@@ -138,13 +138,14 @@ export function App() {
     if (mode === "real" && modelState.status === "idle") warmModel();
   }, [mode, modelState.status]);
 
+  // Look up (or create) the traveler and flight for the bag on screen.
   useEffect(() => {
-    if (!entry || entry.kind !== "sim") {
+    if (!entry || entry.kind !== "real") {
       setPassenger(null);
       return;
     }
     let cancelled = false;
-    fetchRecordByBag(entry.bag.id)
+    saveBag(entry.scan.id, { scan: { caption: entry.scan.fileName } })
       .then((record) => {
         if (!cancelled) setPassenger(record);
       })
@@ -313,42 +314,20 @@ export function App() {
     setConfirmClear(false);
     setShow3d(false);
 
-    if (entry.kind === "sim") {
-      void saveDecisionByBag(entry.bag.id, {
-        action,
-        verdict,
-        threatLabel: top?.label ?? null,
-        confidence: top?.confidence ?? null,
-      })
-        .then(() => setHistoryTick((value) => value + 1))
-        .catch(() => undefined);
-    } else {
-      void createRecord({
-        bagId: meta.id,
-        passenger: {
-          name: "Anonymous traveler",
-          idNumber: `TMP-${meta.id}`,
-          photoUrl: "/history/avatars/anonymous.svg",
-        },
-        flight: {
-          number: "TBD",
-          from: "—",
-          to: "—",
-          date: new Date().toISOString().slice(0, 10),
-        },
-        scan: {
-          imageUrl: "/history/scans/placeholder.svg",
-          view: "single",
-          caption: meta.detail,
-          dataUrl: null,
-        },
-        screening: {
-          verdict,
-          action,
-          threatLabel: top?.label ?? null,
-          confidence: top?.confidence ?? null,
-          screenedAt: new Date().toISOString(),
-        },
+    // Store the decision and the scan the officer saw, with its boxes, in the history server.
+    if (entry.kind === "real") {
+      const scan = entry.scan;
+      const boxes = (analysis?.detections ?? [])
+        .filter((d) => d.box)
+        .map((d) => ({
+          ...d.box!,
+          kind: (d.uncertain ? "review" : d.threat ? "threat" : "benign") as "threat" | "review" | "benign",
+          label: d.label,
+          score: d.confidence,
+        }));
+      void saveBag(scan.id, {
+        scan: { dataUrl: scanToJpeg(scan.bitmap, scan.width, scan.height, boxes), caption: scan.fileName },
+        screening: { verdict, action, threatLabel: top?.label ?? null, confidence: top?.confidence ?? null, source: "console" },
       })
         .then(() => setHistoryTick((value) => value + 1))
         .catch(() => undefined);
@@ -542,7 +521,7 @@ export function App() {
       </header>
 
       {screen === "lane" ? (
-        <LaneView />
+        <LaneView onRecord={() => setHistoryTick((value) => value + 1)} />
       ) : (
       <div className="workspace">
         <aside className="rail queue">
@@ -1035,9 +1014,10 @@ export function App() {
           </div>
         )}
 
-        <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
       </div>
       )}
+
+      <HistorySheet open={showHistory} onClose={() => setShowHistory(false)} refreshKey={historyTick} />
 
       <footer className="bottombar">
         <span>{modelLine}</span>

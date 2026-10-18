@@ -13,10 +13,9 @@ export interface PassengerRecord {
     date: string;
   };
   scan: {
+    /** The stored 2D scan: /api/scans/<bag>.jpg once screened, a placeholder before. */
     imageUrl: string;
-    view: string;
-    caption?: string;
-    dataUrl?: string | null;
+    caption?: string | null;
   };
   screening: {
     verdict: "clear" | "review" | "threat" | "unscreened";
@@ -24,6 +23,10 @@ export interface PassengerRecord {
     threatLabel: string | null;
     confidence: number | null;
     screenedAt: string | null;
+    source?: "lane" | "console" | null;
   };
+  /** True for generated demo travelers; the console only sees the X-ray. */
+  demo?: boolean;
   createdAt: string;
+  updatedAt?: string;
 }

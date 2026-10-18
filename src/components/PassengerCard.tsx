@@ -1,5 +1,5 @@
 import type { PassengerRecord } from "../types/history";
-import { scanImageSrc } from "../lib/historyApi";
+import { photoSrc, scanImageSrc } from "../lib/historyApi";
 
 interface PassengerCardProps {
   record: PassengerRecord;
@@ -11,10 +11,13 @@ export function PassengerCard({ record, compact = false }: PassengerCardProps) {
   return (
     <article className={`passenger-card ${compact ? "compact" : ""}`}>
       <div className="passenger-top">
-        <img src={passenger.photoUrl} alt="" className="passenger-photo" />
+        <img src={photoSrc(record)} alt="" className="passenger-photo" />
         <div>
           <h3>{passenger.name}</h3>
-          <p>ID {passenger.idNumber}</p>
+          <p>
+            ID {passenger.idNumber}
+            {record.demo ? " · demo identity" : ""}
+          </p>
         </div>
         <span className={`passenger-badge ${screening.verdict}`}>
           {screening.action

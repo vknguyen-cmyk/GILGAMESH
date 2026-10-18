@@ -65,6 +65,8 @@ interface LaneOptions {
   nextScan: () => LaneScan | null;
   onChange: (snapshot: LaneSnapshot) => void;
   onInspect: (entry: LaneLogEntry) => void;
+  /** Called once per bag when its result is in. */
+  onResult?: (entry: LaneLogEntry) => void;
   reducedMotion: boolean;
 }
 
@@ -417,7 +419,7 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
     scene.add(g);
     return {
       serial,
-      label: `B-${2040 + serial}`,
+      label: `B-${labelBase + serial}`,
       spec,
       scan,
       group: g,
@@ -581,6 +583,8 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
   const parked: Bag[] = [];
   const log: Bag[] = [];
   let serial = 1;
+  // Bag numbers start somewhere random each session so they stay unique in the history server.
+  const labelBase = 1000 + Math.floor(Math.random() * 8000);
   let paused = false;
   let speed = reducedMotion ? 0.6 : 1;
   let follow = false;
@@ -734,6 +738,7 @@ export function mountLane(host: HTMLElement, options: LaneOptions): LaneApi {
       if (bag.state === "done" && !bag.reported && now - bag.doneAt > ANALYSIS_DELAY) {
         bag.reported = true;
         dirty = true;
+        options.onResult?.(entryOf(bag));
         if (bag.scan.verdict === "clear") {
           cleared++;
           lightColor.set(0x34c759);

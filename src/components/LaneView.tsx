@@ -3,6 +3,7 @@ import { detect, loadModel, type LoadedModel } from "../lib/detector";
 import { buildRealAnalysis, loadScan } from "../lib/realScan";
 import { mountLane, type LaneApi, type LaneDetection, type LaneLogEntry, type LaneScan, type LaneSnapshot } from "../lib/laneScene";
 import { mountInspect } from "../lib/inspectScene";
+import { HistoryOfflineError, saveBag, scanToJpeg } from "../lib/historyApi";
 
 /**
  * The screening lane: a 3D belt and X-ray tunnel where every bag carries a real scan,
@@ -45,7 +46,7 @@ async function analyze(file: File, model: LoadedModel): Promise<LaneScan> {
   };
 }
 
-export function LaneView() {
+export function LaneView({ onRecord }: { onRecord?: () => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const monitorRef = useRef<HTMLCanvasElement>(null);
   const apiRef = useRef<LaneApi | null>(null);
@@ -54,6 +55,9 @@ export function LaneView() {
   const pendingRef = useRef<LaneScan[]>([]);
   const cursorRef = useRef(0);
   const modelRef = useRef<Promise<LoadedModel> | null>(null);
+  const historyOffline = useRef(false);
+  const onRecordRef = useRef(onRecord);
+  onRecordRef.current = onRecord;
 
   const [snapshot, setSnapshot] = useState<LaneSnapshot>({ focus: null, log: [], cleared: 0, held: 0 });
   const [status, setStatus] = useState("Loading the X-ray models…");
@@ -101,6 +105,29 @@ export function LaneView() {
       },
       onChange: setSnapshot,
       onInspect: setInspect,
+      // Each bag's result goes to the history server: its scan with boxes, verdict, and where it went.
+      onResult: (entry) => {
+        if (historyOffline.current) return;
+        const { scan } = entry;
+        const top = scan.top;
+        void saveBag(entry.label, {
+          scan: {
+            dataUrl: scanToJpeg(scan.image, scan.width, scan.height, scan.detections),
+            caption: `${entry.type} · ${scan.file}`,
+          },
+          screening: {
+            verdict: scan.verdict,
+            action: scan.verdict === "clear" ? "cleared" : "held",
+            threatLabel: scan.verdict === "clear" ? null : (top?.label ?? null),
+            confidence: scan.verdict === "clear" ? null : (top?.score ?? null),
+            source: "lane",
+          },
+        })
+          .then(() => onRecordRef.current?.())
+          .catch((error) => {
+            if (error instanceof HistoryOfflineError) historyOffline.current = true;
+          });
+      },
     });
     apiRef.current = api;
     const observer = new ResizeObserver(() => api.resize());

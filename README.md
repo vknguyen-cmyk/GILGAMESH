@@ -21,6 +21,31 @@ npm run build
 npm run preview
 ```
 
+## History server (the backend)
+
+`server/index.js` is a small Express API that keeps one record per screened bag:
+
+- **Bag ID**, plus the **traveler** (anonymous photo, name, ID number) and **that day's flight** (number, from, to, date)
+- the **2D scan** the officer saw, with the models' boxes drawn on it, saved as a JPEG in `server/data/scans/`
+- the **result**: verdict, held or cleared, top threat and score, and whether it was screened on the Lane or the Console
+
+The console only sees X-rays, so each new bag gets a generated demo traveler and flight (stable per bag ID, marked "demo identity"; "DH" is a made-up carrier code). Records are stored in `server/data/records.json` (git-ignored), newest first, capped at 300.
+
+```bash
+npm run dev      # starts the console on :5173 and the history server on :3001 (Vite proxies /api)
+npm run server   # the history server alone
+```
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/api/records` | All records, newest first |
+| `GET` | `/api/records/by-bag/:bagId` | One bag's record |
+| `PUT` | `/api/bags/:bagId` | Create the bag's record (with traveler and flight) or update it: `{ scan: { dataUrl, caption }, screening: { verdict, action, threatLabel, confidence, source } }` |
+| `POST` | `/api/records/reset` | Delete every record and stored scan |
+| `GET` | `/api/scans/:file` | A stored scan image |
+
+GitHub Pages only serves static files, so the public site can't run this server; there the History panel says the server isn't running and screening works as normal. To use History on a deployed site, host `server/` anywhere that runs Node (Render, Railway, Fly) and build the site with `VITE_API_URL=https://your-server.example`.
+
 ## The 3D lane
 
 The console opens on **Lane**: a 3D belt and X-ray tunnel. Every bag carries a real scan, screened in the browser by the same models and thresholds as the console, and its scan builds on the monitor as it crosses the beam. Bags the models flag (threat or "look closer") are pushed off to a bag-search belt. Click the pulsing blue node beside a held bag, or its row in the Lane Log, to open a 3D density view of its scan: darker, denser pixels rise higher, with the models' boxes as 3D frames. It is a visualization of one 2D X-ray, not a CT scan.
