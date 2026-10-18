@@ -1,12 +1,18 @@
 {
-  "name": "Roboflow X-ray · YOLO26n",
+  "name": "Roboflow X-ray \u00b7 YOLO26n",
   "file": "model.onnx",
   "inputSize": 640,
-  "labels": ["Class 0", "Class 1", "Class 2", "Class 3", "Class 4"],
-  "threats": ["Class 0", "Class 1", "Class 2", "Class 3", "Class 4"],
+  "labels": ["Scissors", "Knife", "Knife", "Knife", "Knife"],
+  "threats": ["Scissors", "Knife"],
   "format": "yolov8",
   "resize": "stretch",
   "defaultThreshold": 0.35,
   "iou": 0.45,
-  "metrics": { "mAP50": 0.891, "precision": 0.85, "recall": 0.851, "f1": 0.849, "split": "Roboflow test set" }
+  "metrics": {
+    "mAP50": 0.891,
+    "precision": 0.85,
+    "recall": 0.851,
+    "f1": 0.849,
+    "split": "Roboflow test set"
+  }
 }
