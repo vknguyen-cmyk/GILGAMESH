@@ -36,6 +36,16 @@ export function fetchRecords() {
   return request<PassengerRecord[]>("/api/records");
 }
 
+/** One bag's record, or null if the server has none yet. */
+export async function fetchRecordByBag(bagId: string): Promise<PassengerRecord | null> {
+  try {
+    return await request<PassengerRecord>(`/api/records/by-bag/${encodeURIComponent(bagId)}`);
+  } catch (error) {
+    if (error instanceof HistoryOfflineError) throw error;
+    return null;
+  }
+}
+
 export interface BagUpdate {
   scan?: { dataUrl?: string; caption?: string };
   screening?: {

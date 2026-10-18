@@ -3,7 +3,8 @@ import { detect, loadModel, type LoadedModel } from "../lib/detector";
 import { buildRealAnalysis, loadScan } from "../lib/realScan";
 import { mountLane, type LaneApi, type LaneDetection, type LaneLogEntry, type LaneScan, type LaneSnapshot } from "../lib/laneScene";
 import { mountInspect } from "../lib/inspectScene";
-import { HistoryOfflineError, saveBag, scanToJpeg } from "../lib/historyApi";
+import { HistoryOfflineError, fetchRecordByBag, photoSrc, saveBag, scanToJpeg } from "../lib/historyApi";
+import type { PassengerRecord } from "../types/history";
 
 /**
  * The screening lane: a 3D belt and X-ray tunnel where every bag carries a real scan,
@@ -353,6 +354,28 @@ function InspectPanel({ entry, onClose }: { entry: LaneLogEntry; onClose: () => 
   const closeRef = useRef<HTMLButtonElement>(null);
   const { scan } = entry;
   const top = scan.top;
+  const [owner, setOwner] = useState<PassengerRecord | null>(null);
+  const [ownerState, setOwnerState] = useState<"loading" | "ready" | "offline">("loading");
+
+  // The bag's owner comes from the history server; a bag it hasn't seen yet gets its record now.
+  useEffect(() => {
+    let cancelled = false;
+    setOwner(null);
+    setOwnerState("loading");
+    fetchRecordByBag(entry.label)
+      .then((record) => record ?? saveBag(entry.label))
+      .then((record) => {
+        if (cancelled) return;
+        setOwner(record);
+        setOwnerState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setOwnerState("offline");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.label]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -402,6 +425,30 @@ function InspectPanel({ entry, onClose }: { entry: LaneLogEntry; onClose: () => 
             <button ref={closeRef} type="button" className="lane-btn" onClick={onClose}>
               Close
             </button>
+          </div>
+          <div className="lane-owner" aria-live="polite">
+            {owner ? (
+              <>
+                <img src={photoSrc(owner)} alt="" className="lane-owner-photo" />
+                <div className="lane-owner-who">
+                  <strong>{owner.passenger.name}</strong>
+                  <small>
+                    ID {owner.passenger.idNumber}
+                    {owner.demo ? " · demo identity" : ""}
+                  </small>
+                </div>
+                <div className="lane-owner-flight">
+                  <strong>{owner.flight.number}</strong>
+                  <small>
+                    {owner.flight.from} → {owner.flight.to} · {owner.flight.date}
+                  </small>
+                </div>
+              </>
+            ) : (
+              <small className="lane-owner-note">
+                {ownerState === "offline" ? "Owner details need the history server (npm run dev)." : "Looking up the owner…"}
+              </small>
+            )}
           </div>
           <div className={`lane-verdict ${scan.verdict}`}>
             <span className="dot" />

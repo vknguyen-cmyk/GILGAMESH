@@ -1228,3 +1228,23 @@ input[type="range"] { accent-color: var(--blue); }
 /* History opens over either screen, below the top bar */
 .app { position: relative; }
 .app > .history-sheet { inset: 60px 0 0; }
+
+/* Owner of a held bag, shown in its 3D panel */
+.lane-owner {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg);
+}
+.lane-owner-photo { grid-row: 1; width: 44px; height: 44px; border-radius: 50%; background: var(--fill); object-fit: cover; }
+.lane-owner-who, .lane-owner-flight { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lane-owner-who strong { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.lane-owner-flight { grid-column: 1 / -1; flex-direction: row; align-items: baseline; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.lane-owner-flight strong { font-size: 14px; font-weight: 600; }
+.lane-owner small { font-size: 12px; color: var(--muted); }
+.lane-owner-note { grid-column: 1 / -1; }
