@@ -19,6 +19,14 @@ npm run build
 npm run preview
 ```
 
+## The 3D lane
+
+The console opens on **Lane**: a 3D belt and X-ray tunnel. Every bag carries a real scan, screened in the browser by the same models and thresholds as the console, and its scan builds on the monitor as it crosses the beam. Bags the models flag (threat or "look closer") are pushed off to a bag-search belt. Click the pulsing blue node beside a held bag, or its row in the Lane Log, to open a 3D density view of its scan: darker, denser pixels rise higher, with the models' boxes as 3D frames. It is a visualization of one 2D X-ray, not a CT scan.
+
+The lane loops the scans in `public/samples/` (listed in `samples.json`); drop your own images on it or use **Add X-ray images** and they ride through next. The 3D bags are animation; their look is picked to match each scan's real result. Code: `src/components/LaneView.tsx`, `src/lib/laneScene.ts`, `src/lib/inspectScene.ts`.
+
+Bundled samples come from public research datasets (SIXray, OPIXray) and are for demonstration only; some carry annotation marks from the original images. Swap in images from your own dataset's test split for a cleaner demo.
+
 ## Walk the demo lane
 
 1. Bag `B-1842` enters. After the scan, a **gun** is boxed in red at `0.997`, with the laptop at `0.993`.

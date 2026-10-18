@@ -7,6 +7,7 @@ import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
 import { DensityView } from "./components/DensityView";
+import { LaneView } from "./components/LaneView";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 
 type Mode = "demo" | "real";
@@ -64,6 +65,8 @@ interface SampleScan {
 
 export function App() {
   const [mode, setMode] = useState<Mode>("real");
+  /** Lane: the 3D screening lane. Console: one scan at a time with full findings. */
+  const [screen, setScreen] = useState<"lane" | "console">("lane");
   const [realEntries, setRealEntries] = useState<PaneSource[]>([]);
   const [indexes, setIndexes] = useState<Record<Mode, number>>({ demo: 0, real: 0 });
   const [decisionsByMode, setDecisionsByMode] = useState<Record<Mode, Decision[]>>({ demo: [], real: [] });
@@ -217,6 +220,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (screen !== "console") return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
       if (event.key === "Escape") {
@@ -347,6 +351,7 @@ export function App() {
   }
 
   function onDragEnter(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     dragDepth.current += 1;
@@ -354,18 +359,21 @@ export function App() {
   }
 
   function onDragOver(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
   }
 
   function onDragLeave(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (dragDepth.current === 0) setDragActive(false);
   }
 
   function onDrop(event: DragEvent) {
+    if (screen !== "console") return;
     if (!carriesFiles(event)) return;
     event.preventDefault();
     dragDepth.current = 0;
@@ -431,6 +439,14 @@ export function App() {
             <span>Terminal 3 · Lane 04 · Carry-on</span>
           </div>
         </div>
+        <div className="view-switch" role="group" aria-label="Screen">
+          <button type="button" className={screen === "lane" ? "on" : ""} onClick={() => setScreen("lane")}>
+            Lane
+          </button>
+          <button type="button" className={screen === "console" ? "on" : ""} onClick={() => setScreen("console")}>
+            Console
+          </button>
+        </div>
         <div className="station">
           <span>Terminal 3</span>
           <span className="dot" />
@@ -442,16 +458,23 @@ export function App() {
           <span className="live">
             <i /> Live
           </span>
-          <span className="stat">
-            Cleared <b>{cleared}</b>
-          </span>
-          <span className="stat held">
-            Held <b>{held}</b>
-          </span>
+          {screen === "console" && (
+            <>
+              <span className="stat">
+                Cleared <b>{cleared}</b>
+              </span>
+              <span className="stat held">
+                Held <b>{held}</b>
+              </span>
+            </>
+          )}
           <time dateTime={now.toISOString()}>{formatClock(now)}</time>
         </div>
       </header>
 
+      {screen === "lane" ? (
+        <LaneView />
+      ) : (
       <div className="workspace">
         <aside className="rail queue">
           <div className="rail-head">
@@ -950,11 +973,14 @@ export function App() {
           </div>
         )}
       </div>
+      )}
 
       <footer className="bottombar">
         <span>{modelLine}</span>
         <span className="keys">
-          {show3d
+          {screen === "lane"
+            ? "Drag to orbit · click a held bag's blue node for its 3D view · drop images to add them to the belt"
+            : show3d
             ? "Esc back to 2D · drag to orbit"
             : mode === "real"
               ? "Drop images to add · click a box to select · H hold · C clear · 3 density view"
