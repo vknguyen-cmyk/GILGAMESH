@@ -814,3 +814,20 @@ button:focus-visible, input:focus-visible {
 .density-tag { font: 600 11px/1.2 system-ui, sans-serif; color: #fff; background: #2f62ff; padding: 3px 7px; border-radius: 6px; white-space: nowrap; transform: translateY(-10px); }
 .density-tag.threat { background: #ff3142; }
 .density-layer-tag { font: 600 11px/1 system-ui, sans-serif; color: #3a3a3c; background: rgba(255,255,255,.85); padding: 3px 7px; border-radius: 6px; transform: translate(-50%, -50%); }
+
+/* "Look closer": a threat class the model saw below the alarm threshold */
+.hitbox.uncertain { border: 2px dashed var(--amber); }
+.hitbox.uncertain .chip { background: #c96f00; }
+.verdict-bar.review {
+  background: var(--amber-dim);
+  border-color: rgba(255, 149, 0, 0.35);
+  color: #a35a00;
+}
+.verdict-bar.review span { color: #a35a00; opacity: 0.85; }
+.views.review .plate { border-color: rgba(255, 149, 0, 0.5); }
+.bag-card.current.review { background: var(--amber-dim); }
+.detections button.uncertain { background: var(--amber-dim); }
+.detections button.uncertain.on, .detections button.uncertain:hover { background: rgba(255, 149, 0, 0.2); }
+.detections button.uncertain .det-top em { color: #a35a00; }
+.detections button.uncertain .meter span { background: var(--amber); }
+.density-tag.uncertain { background: #c96f00; }

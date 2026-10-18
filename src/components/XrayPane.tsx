@@ -114,7 +114,7 @@ export function XrayPane({
               <button
                 key={detection.itemId}
                 type="button"
-                className={`hitbox ${detection.threat ? "threat" : "benign"} ${
+                className={`hitbox ${detection.uncertain ? "uncertain" : detection.threat ? "threat" : "benign"} ${
                   activeId === detection.itemId ? "hot" : ""
                 } ${top < 0.07 ? "chip-in" : ""}`}
                 style={{

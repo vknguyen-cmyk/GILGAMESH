@@ -101,6 +101,11 @@ function buildGrid(scan: RealScan): Grid {
   return { cols, rows, density, rgb, tone };
 }
 
+function boxColor(det: Detection) {
+  if (det.uncertain) return 0xff9500;
+  return det.threat ? 0xff3142 : 0x2f62ff;
+}
+
 function label(text: string, className: string) {
   const el = document.createElement("div");
   el.className = className;
@@ -249,12 +254,12 @@ export function mountDensityScene(
     const group = new THREE.Group();
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
-      new THREE.LineBasicMaterial({ color: det.threat ? 0xff3142 : 0x2f62ff }),
+      new THREE.LineBasicMaterial({ color: boxColor(det) }),
     );
     const fillBox = new THREE.Mesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshBasicMaterial({
-        color: det.threat ? 0xff3142 : 0x2f62ff,
+        color: boxColor(det),
         transparent: true,
         opacity: 0.08,
         depthWrite: false,
@@ -262,7 +267,7 @@ export function mountDensityScene(
     );
     fillBox.userData.detectionId = det.itemId;
     group.add(edges, fillBox);
-    const tag = label(`${det.label} ${det.confidence.toFixed(2)}`, `density-tag ${det.threat ? "threat" : ""}`);
+    const tag = label(`${det.label} ${det.confidence.toFixed(2)}`, `density-tag ${det.uncertain ? "uncertain" : det.threat ? "threat" : ""}`);
     group.add(tag);
     const center = new THREE.Vector3((b.x + b.w / 2 - 0.5) * W, 0, (b.y + b.h / 2 - 0.5) * D);
     group.position.copy(center);

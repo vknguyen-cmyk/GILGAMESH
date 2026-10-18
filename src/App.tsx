@@ -57,8 +57,13 @@ function entryMeta(entry: PaneSource) {
   return { id: scan.id, kind: "X-ray image", detail: scan.fileName, size: `${scan.width}×${scan.height}` };
 }
 
+interface SampleScan {
+  file: string;
+  name?: string;
+}
+
 export function App() {
-  const [mode, setMode] = useState<Mode>("demo");
+  const [mode, setMode] = useState<Mode>("real");
   const [realEntries, setRealEntries] = useState<PaneSource[]>([]);
   const [indexes, setIndexes] = useState<Record<Mode, number>>({ demo: 0, real: 0 });
   const [decisionsByMode, setDecisionsByMode] = useState<Record<Mode, Decision[]>>({ demo: [], real: [] });
@@ -284,7 +289,7 @@ export function App() {
 
   function requestClear() {
     if (!analysis || phase !== "ready") return;
-    if (analysis.verdict === "threat") {
+    if (analysis.verdict !== "clear") {
       setConfirmClear(true);
       return;
     }
@@ -295,6 +300,25 @@ export function App() {
     if (phase !== "ready") return;
     setFocusId(id);
     if (entry?.kind === "sim") setShow3d(true);
+  }
+
+  const [samples, setSamples] = useState<SampleScan[]>([]);
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}samples/samples.json`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: SampleScan[]) => setSamples(Array.isArray(list) ? list : []))
+      .catch(() => setSamples([]));
+  }, []);
+
+  async function loadSamples() {
+    const files = await Promise.all(
+      samples.map(async (sample) => {
+        const res = await fetch(`${import.meta.env.BASE_URL}samples/${sample.file}`);
+        const blob = await res.blob();
+        return new File([blob], sample.name ?? sample.file, { type: blob.type });
+      }),
+    );
+    await addFiles(files);
   }
 
   async function addFiles(list: FileList | File[]) {
@@ -361,7 +385,11 @@ export function App() {
   if (entry && phase === "entering") verdictText = isReal ? "Image entering lane" : "Bag entering lane";
   if (entry && phase === "scanning") verdictText = isReal ? "Running threat detector" : "Analyzing dual-energy scan";
   if (entry && phase === "failed") verdictText = "Not screened · model unavailable";
-  if (ready && analysis.verdict === "clear") verdictText = "Safe to proceed";
+  if (ready && analysis.verdict === "clear") verdictText = "No threats found · officer confirms";
+  if (ready && analysis.verdict === "review") {
+    const weak = analysis.detections.find((d) => d.uncertain);
+    verdictText = weak ? `Look closer · possible ${weak.label} ${weak.confidence.toFixed(2)}` : "Look closer";
+  }
   if (ready && analysis.verdict === "threat") {
     verdictText = topThreat
       ? `Threat · ${topThreat.label} ${topThreat.confidence.toFixed(3)}`
@@ -431,11 +459,16 @@ export function App() {
             <span>{done ? "Done" : `${index + 1} of ${Math.max(entries.length, 1)}`}</span>
           </div>
           <div className="lane-modes" role="group" aria-label="Lane source">
-            <button type="button" className={mode === "demo" ? "on" : ""} onClick={() => switchMode("demo")}>
-              Demo
-            </button>
             <button type="button" className={mode === "real" ? "on" : ""} onClick={() => switchMode("real")}>
-              Real{realEntries.length ? ` · ${realEntries.length}` : ""}
+              Real X-rays{realEntries.length ? ` · ${realEntries.length}` : ""}
+            </button>
+            <button
+              type="button"
+              className={mode === "demo" ? "on" : ""}
+              title="Scripted practice bags, not the AI model"
+              onClick={() => switchMode("demo")}
+            >
+              Simulator
             </button>
           </div>
           <ol className="bag-list">
@@ -510,9 +543,20 @@ export function App() {
                   Drop PNG or JPG bag scans anywhere on the console, or choose files. Images stay on this laptop and
                   the model runs in the browser.
                 </p>
-                <button type="button" className="primary safe" onClick={() => fileInput.current?.click()}>
-                  Choose images
-                </button>
+                <div className="empty-actions">
+                  {samples.length > 0 && (
+                    <button type="button" className="primary safe" data-testid="try-samples" onClick={() => void loadSamples()}>
+                      Try {samples.length} sample scans
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={samples.length > 0 ? "ghost" : "primary safe"}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    Choose images
+                  </button>
+                </div>
                 <ModelStatus state={modelState} onRetry={warmModel} />
               </div>
             ) : (
@@ -564,7 +608,7 @@ export function App() {
               </div>
 
               <div className={`views ${stateClass} ${isReal ? "single" : ""}`}>
-                {ready && analysis.verdict === "clear" && <div className="stamp clear">Safe to proceed</div>}
+                {ready && analysis.verdict === "clear" && <div className="stamp clear">No threats found</div>}
                 <XrayPane
                   source={entry}
                   view="top"
@@ -598,6 +642,7 @@ export function App() {
                     {analysis.detections.length} object{analysis.detections.length === 1 ? "" : "s"} ·{" "}
                     {analysis.threatCount} threat
                     {analysis.threatCount === 1 ? "" : "s"}
+                    {analysis.verdict === "review" ? " · weak hits shown in orange" : ""}
                   </span>
                 )}
               </div>
@@ -677,7 +722,7 @@ export function App() {
                     <li key={detection.itemId}>
                       <button
                         type="button"
-                        className={`${detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                        className={`${detection.uncertain ? "uncertain" : detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
                         onMouseEnter={() => setHoveredId(detection.itemId)}
                         onMouseLeave={() => setHoveredId(null)}
                         onClick={() => inspect(detection.itemId)}
@@ -688,7 +733,7 @@ export function App() {
                         </span>
                         <span className="det-sub">
                           {materialText(detection.material, isReal)}
-                          {detection.threat ? " · threat" : ""}
+                          {detection.uncertain ? " · possible threat, below alarm" : detection.threat ? " · threat" : ""}
                         </span>
                         <span className="meter" aria-hidden="true">
                           <span style={{ width: `${detection.confidence * 100}%` }} />
@@ -717,9 +762,13 @@ export function App() {
           </div>
 
           <div className="actions">
-            {confirmClear && analysis?.verdict === "threat" ? (
+            {confirmClear && analysis && analysis.verdict !== "clear" ? (
               <div className="confirm">
-                <p>This bag has a flagged threat. Clearing it overrides the model and sends it down the lane.</p>
+                <p>
+                  {analysis.verdict === "threat"
+                    ? "This bag has a flagged threat. Clearing it overrides the model and sends it down the lane."
+                    : "The model saw a possible threat it wasn't sure about. Clear only if you checked that spot."}
+                </p>
                 <div className="action-row">
                     <button type="button" className="ghost" onClick={() => setConfirmClear(false)}>
                     Keep Holding
@@ -735,7 +784,7 @@ export function App() {
                     <button type="button" className="primary danger" onClick={() => decide("held")}>
                     Hold for Search
                   </button>
-                ) : analysis?.verdict === "threat" ? (
+                ) : analysis && analysis.verdict !== "clear" ? (
                   <>
                     <button type="button" className="primary danger" disabled={!ready} onClick={() => decide("held")}>
                       Hold for Search
@@ -753,7 +802,7 @@ export function App() {
                       disabled={!entry || !ready}
                       onClick={requestClear}
                     >
-                      Safe to Proceed
+                      Clear Bag
                     </button>
                     <button type="button" className="ghost" disabled={!entry || !ready} onClick={() => decide("held")}>
                       Hold for Search
@@ -811,14 +860,14 @@ export function App() {
                   <li key={detection.itemId}>
                     <button
                       type="button"
-                      className={`${detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                      className={`${detection.uncertain ? "uncertain" : detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
                       onClick={() => setFocusId(detection.itemId)}
                     >
                       <span className="det-top">
                         <b>{detection.label}</b>
                         <em>{detection.confidence.toFixed(3)}</em>
                       </span>
-                      <span className="det-sub">{detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
+                      <span className="det-sub">{detection.uncertain ? "Possible threat · click to frame" : detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
                     </button>
                   </li>
                 ))}
@@ -826,7 +875,7 @@ export function App() {
               <div className="actions">
                 {analysis.verdict === "clear" ? (
                   <button type="button" className="primary safe" onClick={() => decide("cleared")}>
-                    Safe to Proceed
+                    Clear Bag
                   </button>
                 ) : (
                   <button type="button" className="primary danger" onClick={() => decide("held")}>
@@ -863,14 +912,14 @@ export function App() {
                   <li key={detection.itemId}>
                     <button
                       type="button"
-                      className={`${detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
+                      className={`${detection.uncertain ? "uncertain" : detection.threat ? "threat" : ""} ${focusId === detection.itemId ? "on" : ""}`}
                       onClick={() => setFocusId(detection.itemId)}
                     >
                       <span className="det-top">
                         <b>{detection.label}</b>
                         <em>{detection.confidence.toFixed(3)}</em>
                       </span>
-                      <span className="det-sub">{detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
+                      <span className="det-sub">{detection.uncertain ? "Possible threat · click to frame" : detection.threat ? "Threat · click to frame" : "Click to frame"}</span>
                     </button>
                   </li>
                 ))}
@@ -879,7 +928,7 @@ export function App() {
               <div className="actions">
                 {analysis.verdict === "clear" ? (
                   <button type="button" className="primary safe" onClick={() => decide("cleared")}>
-                    Safe to Proceed
+                    Clear Bag
                   </button>
                 ) : (
                   <button type="button" className="primary danger" onClick={() => decide("held")}>

@@ -116,6 +116,9 @@ export function estimateMaterial(scan: RealScan, box: Rect): Material | "unknown
  * Build the console's Analysis from raw detections and the current alarm threshold.
  * Re-run on every slider move; it doesn't call the model again.
  */
+/** Threat-class hits at or above this score (but under the alarm) are flagged "look closer". */
+export const REVIEW_FLOOR = 0.15;
+
 export function buildRealAnalysis(
   scan: RealScan,
   raw: RawDetection[],
@@ -123,25 +126,35 @@ export function buildRealAnalysis(
   threshold: number,
   elapsedMs: number,
 ): Analysis {
+  const floor = Math.min(REVIEW_FLOOR, threshold);
   const detections: Detection[] = raw
-    .filter((entry) => entry.score >= threshold)
-    .map((entry, index) => {
+    .map((entry, index) => ({ entry, index, threat: model.threatSet.has(entry.label.toLowerCase()) }))
+    // Everything above the alarm, plus weaker threat-class hits so a near-miss is never shown as clear.
+    .filter(({ entry, threat }) => entry.score >= threshold || (threat && entry.score >= floor))
+    .map(({ entry, index, threat }) => {
       const box = { x: entry.x, y: entry.y, w: entry.w, h: entry.h };
       return {
         itemId: `${scan.id}-${index}`,
         label: entry.label,
         confidence: entry.score,
-        threat: model.threatSet.has(entry.label.toLowerCase()),
+        threat,
+        uncertain: entry.score < threshold,
         material: estimateMaterial(scan, box),
         box,
       };
     })
-    .sort((a, b) => Number(b.threat) - Number(a.threat) || b.confidence - a.confidence);
-  const threatCount = detections.filter((entry) => entry.threat).length;
+    .sort(
+      (a, b) =>
+        Number(!a.uncertain) - Number(!b.uncertain) ||
+        Number(b.threat) - Number(a.threat) ||
+        b.confidence - a.confidence,
+    );
+  const threatCount = detections.filter((entry) => entry.threat && !entry.uncertain).length;
+  const reviewCount = detections.filter((entry) => entry.uncertain).length;
   return {
     bagId: scan.id,
     detections,
-    verdict: threatCount > 0 ? "threat" : "clear",
+    verdict: threatCount > 0 ? "threat" : reviewCount > 0 ? "review" : "clear",
     threatCount,
     elapsedMs,
   };
