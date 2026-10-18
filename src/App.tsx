@@ -291,13 +291,6 @@ export function App() {
     setRun((value) => value + 1);
   }
 
-  function switchMode(next: Mode) {
-    if (next === mode) return;
-    setMode(next);
-    setFilter("all");
-    setUploadNote(null);
-  }
-
   function decide(action: "cleared" | "held") {
     if (lock.current || !entry || (phase !== "ready" && phase !== "failed")) return;
     if (phase === "failed" && action === "cleared") return;
@@ -556,19 +549,6 @@ export function App() {
           <div className="rail-head">
             <h2>Queue</h2>
             <span>{entries.length === 0 ? "Empty" : done ? "Done" : `${index + 1} of ${entries.length}`}</span>
-          </div>
-          <div className="lane-modes" role="group" aria-label="Lane source">
-            <button type="button" className={mode === "real" ? "on" : ""} onClick={() => switchMode("real")}>
-              Real X-rays{realEntries.length ? ` · ${realEntries.length}` : ""}
-            </button>
-            <button
-              type="button"
-              className={mode === "demo" ? "on" : ""}
-              title="Scripted practice bags, not the AI model"
-              onClick={() => switchMode("demo")}
-            >
-              Simulator
-            </button>
           </div>
           <ol className="bag-list">
             {entries.map((laneEntry, entryIndex) => {
