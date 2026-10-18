@@ -262,14 +262,14 @@ export function mountScene(
 ): SceneApi {
   const [W, H, D] = DIMS[bag.type];
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf5f5f7);
+  scene.background = null;
 
   const camera = new THREE.PerspectiveCamera(34, 1, 0.05, 40);
   const radius = Math.max(W, H, D);
   const home = new THREE.Vector3(radius * 1.2, radius * 0.58, radius * 1.28);
   camera.position.copy(home);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;

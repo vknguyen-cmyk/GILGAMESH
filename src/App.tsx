@@ -7,6 +7,7 @@ import type { RawDetection } from "./lib/yolo";
 import type { Analysis, Decision, MaterialFilter, Phase } from "./types";
 import { ThreeView } from "./components/ThreeView";
 import { DensityView } from "./components/DensityView";
+import { Backdrop } from "./components/Backdrop";
 import { XrayPane, type PaneSource } from "./components/XrayPane";
 
 type Mode = "demo" | "real";
@@ -412,12 +413,13 @@ export function App() {
 
   return (
     <div
-      className={`app ${ready && analysis.verdict === "threat" ? "is-threat" : ""} ${ready && analysis.verdict === "clear" ? "is-clear" : ""}`}
+      className={`app ${ready && analysis.verdict === "threat" ? "is-threat" : ""} ${ready && analysis.verdict === "clear" ? "is-clear" : ""} ${ready && analysis.verdict === "review" ? "is-review" : ""}`}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      <Backdrop image={entry?.kind === "real" ? entry.scan.bitmap : null} />
       <header className="topbar">
         <div className="brand">
           <span className="mark" aria-hidden="true">
@@ -456,7 +458,7 @@ export function App() {
         <aside className="rail queue">
           <div className="rail-head">
             <h2>Queue</h2>
-            <span>{done ? "Done" : `${index + 1} of ${Math.max(entries.length, 1)}`}</span>
+            <span>{entries.length === 0 ? "Empty" : done ? "Done" : `${index + 1} of ${entries.length}`}</span>
           </div>
           <div className="lane-modes" role="group" aria-label="Lane source">
             <button type="button" className={mode === "real" ? "on" : ""} onClick={() => switchMode("real")}>
@@ -999,5 +1001,5 @@ function phaseLabel(phase: Phase) {
   if (phase === "entering") return "Entering";
   if (phase === "scanning") return "Scanning";
   if (phase === "failed") return "Not screened";
-  return "Review";
+  return "On screen";
 }

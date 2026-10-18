@@ -126,7 +126,7 @@ export function mountDensityScene(
   let mode: DensityMode = "landscape";
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf5f5f7);
+  scene.background = null;
   const camera = new THREE.PerspectiveCamera(34, 1, 0.02, 40);
   const radius = Math.max(W, D);
   const homeLandscape = new THREE.Vector3(0, radius * 0.95, radius * 1.15);
@@ -134,7 +134,7 @@ export function mountDensityScene(
   let home = homeLandscape;
   camera.position.copy(home);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.style.width = "100%";
@@ -165,7 +165,7 @@ export function mountDensityScene(
   // Base plate the scan sits on.
   const plate = new THREE.Mesh(
     new THREE.PlaneGeometry(W * 1.04, D * 1.04),
-    new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.16 }),
   );
   plate.rotation.x = -Math.PI / 2;
   plate.position.y = -0.002;
@@ -218,7 +218,7 @@ export function mountDensityScene(
     pts.userData.layer = name;
     const frame = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2)),
-      new THREE.LineBasicMaterial({ color: 0x8a94a6, transparent: true, opacity: 0.6 }),
+      new THREE.LineBasicMaterial({ color: 0xc8d4ee, transparent: true, opacity: 0.55 }),
     );
     const sheet = new THREE.Group();
     sheet.add(pts, frame);

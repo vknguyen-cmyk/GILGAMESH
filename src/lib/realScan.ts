@@ -175,18 +175,32 @@ export function renderRealXray(
   filter: MaterialFilter,
 ): Rect {
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = `rgb(${PAPER.join(",")})`;
-  ctx.fillRect(0, 0, width, height);
 
-  const pad = 10;
+  // The scan floats on the glass plate as a rounded card with a soft shadow.
+  const pad = 28;
   const scale = Math.min((width - pad * 2) / scan.width, (height - pad * 2) / scan.height);
   const drawW = scan.width * scale;
   const drawH = scan.height * scale;
   const x = (width - drawW) / 2;
   const y = (height - drawH) / 2;
+  const radius = Math.min(18, drawW / 8, drawH / 8);
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 16;
+  ctx.fillStyle = `rgb(${PAPER.join(",")})`;
+  ctx.beginPath();
+  ctx.roundRect(x, y, drawW, drawH, radius);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, drawW, drawH, radius);
+  ctx.clip();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(scan.bitmap, x, y, drawW, drawH);
+  ctx.restore();
 
   if (filter !== "all" && scan.colorful) {
     const dpr = ctx.getTransform().a || 1;
